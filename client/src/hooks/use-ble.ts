@@ -48,12 +48,12 @@ export function useBLE() {
       console.log("Getting Characteristic...");
       const characteristic = await service.getCharacteristic(MESHTASTIC_DATA_CHAR_UUID);
       
-      // Store reference for writing (in a real app you'd use a ref or state)
+      // Store reference for writing
       (window as any).meshtasticChar = characteristic;
+      (window as any).meshtasticDevice = device;
 
-      // Force a small delay to ensure GATT operations are fully settled
-      await new Promise(resolve => setTimeout(resolve, 500));
-
+      console.log("Setting connected state...");
+      // CRITICAL: We update the state directly here
       setState({
         isConnected: true,
         deviceName: device.name || "Meshtastic Node",
@@ -61,7 +61,9 @@ export function useBLE() {
       });
 
       // Handle abrupt disconnects
-      device.addEventListener('gattserverdisconnected', () => {
+      device.removeEventListener('gattserverdisconnected', (window as any)._onDisconnect);
+      (window as any)._onDisconnect = () => {
+        console.log("GATT Disconnected");
         setState({
           isConnected: false,
           deviceName: null,
@@ -72,7 +74,8 @@ export function useBLE() {
           description: "Connection to Meshtastic lost.",
           variant: "destructive",
         });
-      });
+      };
+      device.addEventListener('gattserverdisconnected', (window as any)._onDisconnect);
 
       toast({
         title: "Connected",
@@ -82,9 +85,12 @@ export function useBLE() {
 
     } catch (error: any) {
       console.error("BLE Connect Error:", error);
-      setState((prev) => ({ ...prev, isConnecting: false }));
+      setState({
+        isConnected: false,
+        deviceName: null,
+        isConnecting: false,
+      });
       
-      // Don't show toast if user just cancelled the picker
       if (error.name !== 'NotFoundError') {
         toast({
           title: "Connection Failed",
@@ -92,12 +98,16 @@ export function useBLE() {
           variant: "destructive",
         });
       }
+    } finally {
+      // We manually set isConnecting to false in the success/error paths
+      // to avoid triggering an extra re-render that might reset state
     }
   }, [toast]);
 
   const disconnect = useCallback(() => {
-    // In a full implementation, you'd keep the gatt server reference and call disconnect()
-    // For this UI mockup, we'll reset state
+    if ((window as any).meshtasticDevice) {
+      (window as any).meshtasticDevice.gatt.disconnect();
+    }
     setState({
       isConnected: false,
       deviceName: null,
