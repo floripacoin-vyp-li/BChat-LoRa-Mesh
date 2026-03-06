@@ -18,10 +18,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useState } from "react";
 
 interface DashboardHeaderProps {
   ble: ReturnType<typeof useBLE>;
+  frequency: string;
+  channel: string;
+  onFrequencyChange: (freq: string) => void;
+  onChannelChange: (ch: string) => void;
 }
 
 const FREQUENCIES = [
@@ -41,20 +44,8 @@ const CHANNELS = [
   { label: "Channel 5", value: "5" },
 ];
 
-export function DashboardHeader({ ble }: DashboardHeaderProps) {
+export function DashboardHeader({ ble, frequency, channel, onFrequencyChange, onChannelChange }: DashboardHeaderProps) {
   const { mutate: clearMessages, isPending: isClearing } = useClearMessages();
-  const [frequency, setFrequency] = useState("919.875");
-  const [channel, setChannel] = useState("0");
-
-  const handleFreqChange = (freq: string) => {
-    setFrequency(freq);
-    console.log(`BLE: Requesting frequency change to ${freq} MHz`);
-  };
-
-  const handleChannelChange = (ch: string) => {
-    setChannel(ch);
-    console.log(`BLE: Requesting channel change to ${ch}`);
-  };
 
   return (
     <header className="glass-panel border-b-0 rounded-t-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 relative overflow-hidden">
@@ -90,7 +81,7 @@ export function DashboardHeader({ ble }: DashboardHeaderProps) {
                 {FREQUENCIES.map((freq) => (
                   <DropdownMenuItem 
                     key={freq.value}
-                    onClick={() => handleFreqChange(freq.value)}
+                    onClick={() => onFrequencyChange(freq.value)}
                     className="cursor-pointer focus:bg-primary/20 focus:text-primary"
                   >
                     {freq.label}
@@ -113,7 +104,7 @@ export function DashboardHeader({ ble }: DashboardHeaderProps) {
                 {CHANNELS.map((ch) => (
                   <DropdownMenuItem 
                     key={ch.value}
-                    onClick={() => handleChannelChange(ch.value)}
+                    onClick={() => onChannelChange(ch.value)}
                     className="cursor-pointer focus:bg-primary/20 focus:text-primary"
                   >
                     {ch.label}

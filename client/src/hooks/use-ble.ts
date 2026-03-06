@@ -1,10 +1,73 @@
 import { useState, useCallback } from "react";
 import { useToast } from "./use-toast";
+import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
+import { Mesh, Portnums } from "@meshtastic/protobufs";
 
 interface BLEState {
   isConnected: boolean;
   deviceName: string | null;
   isConnecting: boolean;
+}
+
+// Correct Meshtastic BLE UUIDs (firmware 2.x)
+const SERVICE_UUID = "6ba1b218-15a8-461f-9fa8-5dcae273eafd";
+const TORADIO_UUID = "f75c76d2-129e-4dad-a1dd-7866124401e7";
+const FROMRADIO_UUID = "2c55e69e-4993-11ed-b878-0242ac120002";
+const FROMNUM_UUID = "ed9da18c-a800-4f66-a670-aa7547e34453";
+
+async function readAllFromRadio(fromRadioChar: BluetoothRemoteGATTCharacteristic): Promise<void> {
+  while (true) {
+    const data = await fromRadioChar.readValue();
+    if (data.byteLength === 0) break;
+    processFromRadio(new Uint8Array(data.buffer));
+  }
+}
+
+function processFromRadio(bytes: Uint8Array): void {
+  try {
+    const fromRadio = fromBinary(Mesh.FromRadioSchema, bytes);
+    console.log("BLE: FromRadio packet:", fromRadio.payloadVariant.case);
+
+    if (fromRadio.payloadVariant.case === "packet") {
+      const packet = fromRadio.payloadVariant.value;
+      if (packet.payloadVariant.case === "decoded") {
+        const decoded = packet.payloadVariant.value;
+        if (decoded.portnum === Portnums.PortNum.TEXT_MESSAGE_APP) {
+          const text = new TextDecoder().decode(decoded.payload);
+          console.log("BLE: Text message received:", text);
+          if (text.trim().length > 0) {
+            fetch("/api/messages", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sender: "node", content: text }),
+            }).then(() => {
+              (window as any).queryClient?.invalidateQueries({ queryKey: ["/api/messages"] });
+            });
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("BLE: Could not parse FromRadio packet:", e);
+  }
+}
+
+export function buildTextToRadio(text: string): Uint8Array {
+  const packet = create(Mesh.MeshPacketSchema, {
+    to: 0xffffffff,
+    wantAck: false,
+    payloadVariant: {
+      case: "decoded",
+      value: create(Mesh.DataSchema, {
+        portnum: Portnums.PortNum.TEXT_MESSAGE_APP,
+        payload: new TextEncoder().encode(text),
+      }),
+    },
+  });
+  const toRadio = create(Mesh.ToRadioSchema, {
+    payloadVariant: { case: "packet", value: packet },
+  });
+  return toBinary(Mesh.ToRadioSchema, toRadio);
 }
 
 export function useBLE() {
@@ -16,11 +79,10 @@ export function useBLE() {
   const { toast } = useToast();
 
   const connect = useCallback(async () => {
-    // Check if Web Bluetooth API is available
     if (!navigator || !(navigator as any).bluetooth) {
       toast({
         title: "Bluetooth Not Supported",
-        description: "Your browser does not support the Web Bluetooth API. Try Chrome or Edge.",
+        description: "Web Bluetooth requires Chrome or Edge over HTTPS.",
         variant: "destructive",
       });
       return;
@@ -29,137 +91,89 @@ export function useBLE() {
     setState((prev) => ({ ...prev, isConnecting: true }));
 
     try {
-      const SERVICE_UUID = "6ba1b218-15a8-461f-a635-012110031999";
-      const DATA_UUID = "8ba1b218-15a8-461f-a635-012110031999";
-      
-      console.log("BLE: Opening device picker...");
-      // Reverting to the most compatible requestDevice call
+      console.log("BLE: Requesting device...");
       const device = await (navigator as any).bluetooth.requestDevice({
         acceptAllDevices: true,
-        optionalServices: [SERVICE_UUID]
+        optionalServices: [SERVICE_UUID],
       });
 
       console.log("BLE: Device selected:", device.name);
       const server = await device.gatt.connect();
-      
       console.log("BLE: GATT connected");
-      // CRITICAL: We set state as soon as GATT connects
+
+      let service: BluetoothRemoteGATTService;
+      try {
+        service = await server.getPrimaryService(SERVICE_UUID);
+        console.log("BLE: Meshtastic service found");
+      } catch (e) {
+        console.error("BLE: Meshtastic service NOT found. Is the node powered on and in BLE mode?");
+        setState({ isConnected: false, deviceName: null, isConnecting: false });
+        toast({
+          title: "Meshtastic Service Not Found",
+          description: "Device does not expose the Meshtastic BLE service. Check that your node has BLE enabled in its config.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const toRadioChar = await service.getCharacteristic(TORADIO_UUID);
+      const fromRadioChar = await service.getCharacteristic(FROMRADIO_UUID);
+      const fromNumChar = await service.getCharacteristic(FROMNUM_UUID);
+
+      (window as any).meshtasticToRadio = toRadioChar;
+      (window as any).meshtasticDevice = device;
+
       setState({
         isConnected: true,
         deviceName: device.name || "Meshtastic Node",
         isConnecting: false,
       });
 
-      // Start notifications to keep link active
-      try {
-        const service = await server.getPrimaryService(SERVICE_UUID);
-        const characteristic = await service.getCharacteristic(DATA_UUID);
-        
-        (window as any).meshtasticChar = characteristic;
-        (window as any).meshtasticDevice = device;
+      // Initial sync: read all pending packets from node
+      console.log("BLE: Reading initial packets from radio...");
+      await readAllFromRadio(fromRadioChar);
 
-        await characteristic.startNotifications();
-        characteristic.addEventListener('characteristicvaluechanged', (event: any) => {
-          const value = event.target.value;
-          
-          // Meshtastic packets start with '!' (0x21) for text or other markers
-          // We'll log the raw bytes for debugging
-          const bytes = new Uint8Array(value.buffer);
-          console.log("BLE: Incoming Buffer:", Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' '));
+      // Subscribe to fromNum — fires when a new packet is available in fromRadio
+      await fromNumChar.startNotifications();
+      fromNumChar.addEventListener("characteristicvaluechanged", async () => {
+        console.log("BLE: fromNum notify — reading fromRadio...");
+        await readAllFromRadio(fromRadioChar);
+      });
 
-          let content = "";
-          try {
-            // Try to see if there's an ASCII string in there (very basic decoding)
-            const decoder = new TextDecoder('utf-8', { fatal: false });
-            content = decoder.decode(bytes);
-            
-            // Filter out non-printable characters for the UI
-            content = content.replace(/[^\x20-\x7E]/g, '');
-            
-            if (content.length < 2) {
-              console.log("BLE: Packet too short or binary, skipping UI post");
-              return;
-            }
-          } catch (e) {
-            console.log("BLE: Binary packet detected, skipping UI");
-            return;
-          }
+      console.log("BLE: Fully initialised. Listening for LoRa messages.");
 
-          console.log("BLE: Decoded Content:", content);
-
-          // Post received message to backend
-          fetch('/api/messages', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              sender: 'node',
-              content: content
-            })
-          }).then(() => {
-            (window as any).queryClient?.invalidateQueries({ queryKey: ['/api/messages'] });
-          });
-        });
-        console.log("BLE: Notifications started");
-
-        // PROBE ROUTINE: Try to read some device info/config
-        try {
-           console.log("BLE: Probing device capabilities...");
-           
-           // Meshtastic nodes usually have a Device Info service (0x180A)
-           // and often a custom configuration service.
-           // Since we are connected to the main data service, we can try to
-           // discover other services to see what's available.
-           const services = await server.getPrimaryServices();
-           console.log("BLE: Available Services:", services.map(s => s.uuid));
-           
-           const deviceName = device.name;
-           console.log(`BLE: Device ${deviceName} linked. Monitoring for LoRa traffic.`);
-           
-           // If we find the Device Information Service, we can read the hardware version
-           try {
-             const infoService = await server.getPrimaryService('device_information');
-             const modelChar = await infoService.getCharacteristic('model_number_string');
-             const model = await modelChar.readValue();
-             console.log("BLE: Hardware Model:", new TextDecoder().decode(model));
-           } catch (e) {
-             console.log("BLE: Could not read model info");
-           }
-        } catch (probeErr) {
-           console.log("BLE: Extended probe not supported by this node version", probeErr);
-        }
-      } catch (e) {
-        console.warn("BLE: Service/Char lookup failed, but GATT is alive", e);
-      }
-
-      // System message
-      fetch('/api/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      // Post connection system message
+      fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sender: 'system',
-          content: `UPLINK ESTABLISHED: Bridged to ${device.name || "device"}.`
-        })
+          sender: "system",
+          content: `UPLINK ESTABLISHED: Bridged to ${device.name || "Meshtastic Node"}. LoRa terminal active.`,
+        }),
       }).then(() => {
-        window.dispatchEvent(new CustomEvent('ble-connected'));
-        (window as any).queryClient?.invalidateQueries({ queryKey: ['/api/messages'] });
+        window.dispatchEvent(new CustomEvent("ble-connected"));
+        (window as any).queryClient?.invalidateQueries({ queryKey: ["/api/messages"] });
       });
 
       const onDisconnect = () => {
         console.log("BLE: Disconnected");
         setState({ isConnected: false, deviceName: null, isConnecting: false });
-        toast({ title: "Disconnected", variant: "destructive" });
+        toast({ title: "Disconnected", description: "Node link lost.", variant: "destructive" });
       };
-      
-      device.addEventListener('gattserverdisconnected', onDisconnect);
+
+      device.addEventListener("gattserverdisconnected", onDisconnect);
       (window as any)._onDisconnect = onDisconnect;
 
       toast({ title: "Connected", description: `Bridged to ${device.name}.` });
-
     } catch (error: any) {
       console.error("BLE Error:", error);
       setState({ isConnected: false, deviceName: null, isConnecting: false });
-      if (error.name !== 'NotFoundError') {
-        toast({ title: "Connection Failed", description: error.message, variant: "destructive" });
+      if (error.name !== "NotFoundError") {
+        toast({
+          title: "Connection Failed",
+          description: error.message || "BLE pairing failed.",
+          variant: "destructive",
+        });
       }
     } finally {
       setState((prev) => ({ ...prev, isConnecting: false }));
@@ -170,21 +184,9 @@ export function useBLE() {
     if ((window as any).meshtasticDevice) {
       (window as any).meshtasticDevice.gatt.disconnect();
     }
-    setState({
-      isConnected: false,
-      deviceName: null,
-      isConnecting: false,
-    });
-    
-    toast({
-      title: "Disconnected",
-      description: "Manually disconnected from Meshtastic.",
-    });
+    setState({ isConnected: false, deviceName: null, isConnecting: false });
+    toast({ title: "Disconnected", description: "Manually disconnected." });
   }, [toast]);
 
-  return {
-    ...state,
-    connect,
-    disconnect,
-  };
+  return { ...state, connect, disconnect };
 }

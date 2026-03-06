@@ -4,15 +4,16 @@ import { useSendMessage } from "@/hooks/use-messages";
 
 interface ChatInputProps {
   isConnected: boolean;
+  frequency: string;
+  channel: string;
 }
 
-export function ChatInput({ isConnected }: ChatInputProps) {
+export function ChatInput({ isConnected, frequency, channel }: ChatInputProps) {
   const [content, setContent] = useState("");
   const { mutate: sendMessage, isPending } = useSendMessage();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Keep focus when connected
     if (isConnected) {
       inputRef.current?.focus();
     }
@@ -45,6 +46,7 @@ export function ChatInput({ isConnected }: ChatInputProps) {
           placeholder={isConnected ? "Transmit message..." : "Connect to Meshtastic to transmit"}
           disabled={!isConnected || isPending}
           className="flex-1 bg-transparent border-none px-2 py-4 text-sm focus:outline-none focus:ring-0 disabled:opacity-50 text-foreground placeholder:text-muted-foreground/50 font-mono"
+          data-testid="input-message"
         />
         
         <div className="pr-2">
@@ -52,6 +54,7 @@ export function ChatInput({ isConnected }: ChatInputProps) {
             type="submit"
             disabled={!content.trim() || !isConnected || isPending}
             className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground disabled:opacity-30 disabled:hover:bg-primary/10 disabled:hover:text-primary transition-all duration-200"
+            data-testid="button-send"
           >
             <Send size={18} className={isPending ? "animate-pulse" : ""} />
           </button>
@@ -59,8 +62,8 @@ export function ChatInput({ isConnected }: ChatInputProps) {
       </form>
       
       <div className="mt-2 flex justify-between items-center px-2 text-[10px] font-mono text-muted-foreground/60 uppercase tracking-widest">
-        <span>Channel: Primary</span>
-        <span>Freq: 915.0 MHz (LoRa)</span>
+        <span>Channel: {channel === "0" ? "Primary (CH 0)" : `CH ${channel}`}</span>
+        <span>Freq: {frequency} MHz (LoRa)</span>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type MessageInput } from "@shared/routes";
+import { buildTextToRadio } from "./use-ble";
 import { z } from "zod";
 
 // Helper for safe parsing and logging
@@ -30,19 +31,12 @@ export function useSendMessage() {
     mutationFn: async (message: MessageInput) => {
       const validated = api.messages.create.input.parse(message);
       
-      // OPTIONAL: Send to Meshtastic hardware if connected
-      if (validated.sender === "user" && (window as any).meshtasticChar) {
+      // Transmit to Meshtastic hardware using proper protobuf encoding
+      if (validated.sender === "user" && (window as any).meshtasticToRadio) {
         try {
-          // Meshtastic expects a specific packet format for text
-          // For simple testing, we send the raw string but prefix it with '!'
-          // which is sometimes used as a marker for broadcast text
-          const encoder = new TextEncoder();
-          const data = encoder.encode(validated.content);
-          
-          // If content is just text, we send it as is. 
-          // Note: Full protocol requires protobuf, but many nodes accept raw text for debug
-          await (window as any).meshtasticChar.writeValue(data);
-          console.log("BLE: Transmitted to hardware:", validated.content);
+          const bytes = buildTextToRadio(validated.content);
+          await (window as any).meshtasticToRadio.writeValue(bytes);
+          console.log("BLE: Transmitted protobuf packet:", validated.content);
         } catch (err) {
           console.error("BLE: Transmission failed:", err);
         }
