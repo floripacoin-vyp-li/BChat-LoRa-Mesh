@@ -30,13 +30,8 @@ function processFromRadio(bytes: Uint8Array): void {
 
     if (fromRadio.payloadVariant.case === "packet") {
       const packet = fromRadio.payloadVariant.value;
-      const from = packet.from >>> 0;
-      const payloadCase = packet.payloadVariant.case;
-      console.log(`BLE: Mesh packet from node 0x${from.toString(16)}, payload: ${payloadCase}`);
-
-      if (payloadCase === "decoded") {
+      if (packet.payloadVariant.case === "decoded") {
         const decoded = packet.payloadVariant.value;
-        console.log("BLE: Portnum:", decoded.portnum);
         if (decoded.portnum === Portnums.PortNum.TEXT_MESSAGE_APP) {
           const text = new TextDecoder().decode(decoded.payload);
           console.log("BLE: Text message received:", text);
@@ -44,17 +39,12 @@ function processFromRadio(bytes: Uint8Array): void {
             fetch("/api/messages", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                sender: "node",
-                content: `[${from.toString(16).toUpperCase()}] ${text}`,
-              }),
+              body: JSON.stringify({ sender: "node", content: text }),
             }).then(() => {
               (window as any).queryClient?.invalidateQueries({ queryKey: ["/api/messages"] });
             });
           }
         }
-      } else if (payloadCase === "encrypted") {
-        console.log("BLE: Encrypted packet — node may use a non-default channel key");
       }
     }
   } catch (e) {
@@ -108,13 +98,11 @@ export function useBLE() {
       });
 
       console.log("BLE: Device selected:", device.name);
-      console.log("BLE: Connecting to GATT server...");
       const server = await device.gatt.connect();
       console.log("BLE: GATT connected");
 
       let service: BluetoothRemoteGATTService;
       try {
-        console.log("BLE: Getting primary service...");
         service = await server.getPrimaryService(SERVICE_UUID);
         console.log("BLE: Meshtastic service found");
       } catch (e) {
@@ -128,13 +116,9 @@ export function useBLE() {
         return;
       }
 
-      console.log("BLE: Getting toRadio characteristic...");
       const toRadioChar = await service.getCharacteristic(TORADIO_UUID);
-      console.log("BLE: Getting fromRadio characteristic...");
       const fromRadioChar = await service.getCharacteristic(FROMRADIO_UUID);
-      console.log("BLE: Getting fromNum characteristic...");
       const fromNumChar = await service.getCharacteristic(FROMNUM_UUID);
-      console.log("BLE: All characteristics obtained");
 
       (window as any).meshtasticToRadio = toRadioChar;
       (window as any).meshtasticDevice = device;
@@ -146,30 +130,15 @@ export function useBLE() {
       });
 
       // Initial sync: read all pending packets from node
-      // Wrapped in try/catch — a read error here must not fail the whole connection
-      try {
-        console.log("BLE: Reading initial packets from radio...");
-        await readAllFromRadio(fromRadioChar);
-      } catch (e) {
-        console.warn("BLE: Initial fromRadio read failed (non-fatal):", e);
-      }
+      console.log("BLE: Reading initial packets from radio...");
+      await readAllFromRadio(fromRadioChar);
 
       // Subscribe to fromNum — fires when a new packet is available in fromRadio
-      // Also wrapped: some firmware versions may not support NOTIFY on fromNum
-      try {
-        await fromNumChar.startNotifications();
-        fromNumChar.addEventListener("characteristicvaluechanged", async () => {
-          console.log("BLE: fromNum notify — reading fromRadio...");
-          try {
-            await readAllFromRadio(fromRadioChar);
-          } catch (e) {
-            console.warn("BLE: fromRadio read on notify failed:", e);
-          }
-        });
-        console.log("BLE: Subscribed to fromNum notifications.");
-      } catch (e) {
-        console.warn("BLE: Could not subscribe to fromNum (non-fatal):", e);
-      }
+      await fromNumChar.startNotifications();
+      fromNumChar.addEventListener("characteristicvaluechanged", async () => {
+        console.log("BLE: fromNum notify — reading fromRadio...");
+        await readAllFromRadio(fromRadioChar);
+      });
 
       console.log("BLE: Fully initialised. Listening for LoRa messages.");
 
@@ -197,12 +166,12 @@ export function useBLE() {
 
       toast({ title: "Connected", description: `Bridged to ${device.name}.` });
     } catch (error: any) {
-      console.error("BLE Error — name:", error?.name, "| message:", error?.message, "| full:", error);
+      console.error("BLE Error:", error);
       setState({ isConnected: false, deviceName: null, isConnecting: false });
-      if (error?.name !== "NotFoundError") {
+      if (error.name !== "NotFoundError") {
         toast({
           title: "Connection Failed",
-          description: `${error?.name ?? "Error"}: ${error?.message ?? "BLE pairing failed."}`,
+          description: error.message || "BLE pairing failed.",
           variant: "destructive",
         });
       }
