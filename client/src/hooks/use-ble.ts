@@ -33,14 +33,24 @@ export function useBLE() {
       const MESHTASTIC_SERVICE_UUID = "6ba1b218-15a8-461f-a635-012110031999";
       const MESHTASTIC_DATA_CHAR_UUID = "8ba1b218-15a8-461f-a635-012110031999";
       
-      console.log("Requesting device with any filter...");
+      console.log("Requesting device with relaxed filters...");
+      // Try with filters first, but allow all devices as fallback in case of advertisement issues
       const device = await (navigator as any).bluetooth.requestDevice({
-        acceptAllDevices: true,
+        filters: [{ services: [MESHTASTIC_SERVICE_UUID] }],
         optionalServices: [MESHTASTIC_SERVICE_UUID]
+      }).catch(async () => {
+        console.log("Filtering failed, requesting all devices...");
+        return await (navigator as any).bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [MESHTASTIC_SERVICE_UUID]
+        });
       });
 
       console.log("Connecting to GATT Server...");
-      const server = await device.gatt.connect();
+      const server = await Promise.race([
+        device.gatt.connect(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("GATT Connection timeout (15s)")), 15000))
+      ]);
       
       console.log("Getting Service...");
       const service = await server.getPrimaryService(MESHTASTIC_SERVICE_UUID);
@@ -48,21 +58,18 @@ export function useBLE() {
       console.log("Getting Characteristic...");
       const characteristic = await service.getCharacteristic(MESHTASTIC_DATA_CHAR_UUID);
       
-      // Store reference for writing
+      // Store references
       (window as any).meshtasticChar = characteristic;
       (window as any).meshtasticDevice = device;
 
       console.log("Setting connected state...");
-      // CRITICAL: We update the state directly here
       setState({
         isConnected: true,
         deviceName: device.name || "Meshtastic Node",
         isConnecting: false,
       });
 
-      // Handle abrupt disconnects
-      device.removeEventListener('gattserverdisconnected', (window as any)._onDisconnect);
-      (window as any)._onDisconnect = () => {
+      const onDisconnect = () => {
         console.log("GATT Disconnected");
         setState({
           isConnected: false,
@@ -75,7 +82,9 @@ export function useBLE() {
           variant: "destructive",
         });
       };
-      device.addEventListener('gattserverdisconnected', (window as any)._onDisconnect);
+      
+      device.addEventListener('gattserverdisconnected', onDisconnect);
+      (window as any)._onDisconnect = onDisconnect;
 
       toast({
         title: "Connected",
@@ -85,6 +94,7 @@ export function useBLE() {
 
     } catch (error: any) {
       console.error("BLE Connect Error:", error);
+      
       setState({
         isConnected: false,
         deviceName: null,
@@ -92,15 +102,18 @@ export function useBLE() {
       });
       
       if (error.name !== 'NotFoundError') {
+        let errorMsg = error.message || "Unknown error";
+        if (error.name === 'SecurityError') errorMsg = "Bluetooth security block. Ensure HTTPS and user gesture.";
+        if (error.name === 'NetworkError') errorMsg = "GATT connection failed. Is the device in range?";
+        
         toast({
           title: "Connection Failed",
-          description: error.message || "Failed to pair with device.",
+          description: errorMsg,
           variant: "destructive",
         });
       }
     } finally {
-      // We manually set isConnecting to false in the success/error paths
-      // to avoid triggering an extra re-render that might reset state
+      setState((prev) => ({ ...prev, isConnecting: false }));
     }
   }, [toast]);
 
