@@ -1,4 +1,4 @@
-import { Activity, Bluetooth, Power, Trash2, Settings2 } from "lucide-react";
+import { Activity, Bluetooth, Power, Trash2, Settings2, Radio } from "lucide-react";
 import { useBLE } from "@/hooks/use-ble";
 import { useClearMessages } from "@/hooks/use-messages";
 import {
@@ -25,20 +25,35 @@ interface DashboardHeaderProps {
 }
 
 const FREQUENCIES = [
+  { label: "919.875 MHz (Custom)", value: "919.875" },
   { label: "915.0 MHz (US)", value: "915.0" },
   { label: "868.0 MHz (EU)", value: "868.0" },
   { label: "433.0 MHz (CN)", value: "433.0" },
   { label: "923.0 MHz (AS)", value: "923.0" },
 ];
 
+const CHANNELS = [
+  { label: "Channel 0", value: "0" },
+  { label: "Channel 1", value: "1" },
+  { label: "Channel 2", value: "2" },
+  { label: "Channel 3", value: "3" },
+  { label: "Channel 4", value: "4" },
+  { label: "Channel 5", value: "5" },
+];
+
 export function DashboardHeader({ ble }: DashboardHeaderProps) {
   const { mutate: clearMessages, isPending: isClearing } = useClearMessages();
-  const [frequency, setFrequency] = useState("915.0");
+  const [frequency, setFrequency] = useState("919.875");
+  const [channel, setChannel] = useState("0");
 
   const handleFreqChange = (freq: string) => {
     setFrequency(freq);
     console.log(`BLE: Requesting frequency change to ${freq} MHz`);
-    // In a full implementation, we would write a configuration packet to the characteristic here
+  };
+
+  const handleChannelChange = (ch: string) => {
+    setChannel(ch);
+    console.log(`BLE: Requesting channel change to ${ch}`);
   };
 
   return (
@@ -60,28 +75,53 @@ export function DashboardHeader({ ble }: DashboardHeaderProps) {
 
       <div className="flex items-center gap-3 w-full sm:w-auto relative z-10">
         {ble.isConnected && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button 
-                className="px-3 py-2 rounded-lg border border-white/10 text-muted-foreground hover:bg-white/5 flex items-center gap-2 text-xs font-mono transition-colors"
-                data-testid="button-frequency"
-              >
-                <Settings2 size={14} />
-                <span>{frequency} MHz</span>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-card border-border/50 font-mono text-xs">
-              {FREQUENCIES.map((freq) => (
-                <DropdownMenuItem 
-                  key={freq.value}
-                  onClick={() => handleFreqChange(freq.value)}
-                  className="cursor-pointer focus:bg-primary/20 focus:text-primary"
+          <>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button 
+                  className="px-3 py-2 rounded-lg border border-white/10 text-muted-foreground hover:bg-white/5 flex items-center gap-2 text-xs font-mono transition-colors"
+                  data-testid="button-frequency"
                 >
-                  {freq.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  <Settings2 size={14} />
+                  <span>{frequency} MHz</span>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-card border-border/50 font-mono text-xs">
+                {FREQUENCIES.map((freq) => (
+                  <DropdownMenuItem 
+                    key={freq.value}
+                    onClick={() => handleFreqChange(freq.value)}
+                    className="cursor-pointer focus:bg-primary/20 focus:text-primary"
+                  >
+                    {freq.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button 
+                  className="px-3 py-2 rounded-lg border border-white/10 text-muted-foreground hover:bg-white/5 flex items-center gap-2 text-xs font-mono transition-colors"
+                  data-testid="button-channel"
+                >
+                  <Radio size={14} />
+                  <span>CH {channel}</span>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-card border-border/50 font-mono text-xs">
+                {CHANNELS.map((ch) => (
+                  <DropdownMenuItem 
+                    key={ch.value}
+                    onClick={() => handleChannelChange(ch.value)}
+                    className="cursor-pointer focus:bg-primary/20 focus:text-primary"
+                  >
+                    {ch.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
         )}
 
         <AlertDialog>
