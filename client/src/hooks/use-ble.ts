@@ -51,6 +51,9 @@ export function useBLE() {
       // Store reference for writing (in a real app you'd use a ref or state)
       (window as any).meshtasticChar = characteristic;
 
+      // Force a small delay to ensure GATT operations are fully settled
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       setState({
         isConnected: true,
         deviceName: device.name || "Meshtastic Node",
