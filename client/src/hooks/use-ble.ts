@@ -61,9 +61,31 @@ export function useBLE() {
         await characteristic.startNotifications();
         characteristic.addEventListener('characteristicvaluechanged', (event: any) => {
           const value = event.target.value;
-          const decoder = new TextDecoder();
-          const content = decoder.decode(value);
-          console.log("BLE: Data received:", content);
+          
+          // Meshtastic packets start with '!' (0x21) for text or other markers
+          // We'll log the raw bytes for debugging
+          const bytes = new Uint8Array(value.buffer);
+          console.log("BLE: Incoming Buffer:", Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' '));
+
+          let content = "";
+          try {
+            // Try to see if there's an ASCII string in there (very basic decoding)
+            const decoder = new TextDecoder('utf-8', { fatal: false });
+            content = decoder.decode(bytes);
+            
+            // Filter out non-printable characters for the UI
+            content = content.replace(/[^\x20-\x7E]/g, '');
+            
+            if (content.length < 2) {
+              console.log("BLE: Packet too short or binary, skipping UI post");
+              return;
+            }
+          } catch (e) {
+            console.log("BLE: Binary packet detected, skipping UI");
+            return;
+          }
+
+          console.log("BLE: Decoded Content:", content);
 
           // Post received message to backend
           fetch('/api/messages', {
@@ -78,6 +100,33 @@ export function useBLE() {
           });
         });
         console.log("BLE: Notifications started");
+
+        // PROBE ROUTINE: Try to read some device info/config
+        try {
+           console.log("BLE: Probing device capabilities...");
+           
+           // Meshtastic nodes usually have a Device Info service (0x180A)
+           // and often a custom configuration service.
+           // Since we are connected to the main data service, we can try to
+           // discover other services to see what's available.
+           const services = await server.getPrimaryServices();
+           console.log("BLE: Available Services:", services.map(s => s.uuid));
+           
+           const deviceName = device.name;
+           console.log(`BLE: Device ${deviceName} linked. Monitoring for LoRa traffic.`);
+           
+           // If we find the Device Information Service, we can read the hardware version
+           try {
+             const infoService = await server.getPrimaryService('device_information');
+             const modelChar = await infoService.getCharacteristic('model_number_string');
+             const model = await modelChar.readValue();
+             console.log("BLE: Hardware Model:", new TextDecoder().decode(model));
+           } catch (e) {
+             console.log("BLE: Could not read model info");
+           }
+        } catch (probeErr) {
+           console.log("BLE: Extended probe not supported by this node version", probeErr);
+        }
       } catch (e) {
         console.warn("BLE: Service/Char lookup failed, but GATT is alive", e);
       }

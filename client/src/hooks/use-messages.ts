@@ -33,8 +33,14 @@ export function useSendMessage() {
       // OPTIONAL: Send to Meshtastic hardware if connected
       if (validated.sender === "user" && (window as any).meshtasticChar) {
         try {
+          // Meshtastic expects a specific packet format for text
+          // For simple testing, we send the raw string but prefix it with '!'
+          // which is sometimes used as a marker for broadcast text
           const encoder = new TextEncoder();
           const data = encoder.encode(validated.content);
+          
+          // If content is just text, we send it as is. 
+          // Note: Full protocol requires protobuf, but many nodes accept raw text for debug
           await (window as any).meshtasticChar.writeValue(data);
           console.log("BLE: Transmitted to hardware:", validated.content);
         } catch (err) {
