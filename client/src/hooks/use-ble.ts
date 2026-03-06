@@ -75,6 +75,15 @@ function processFromRadio(bytes: Uint8Array): void {
   }
 }
 
+export function buildWantConfig(): Uint8Array {
+  // Random 32-bit nonce — tells the firmware "I'm a new client, send me config + start forwarding"
+  const nonce = Math.floor(Math.random() * 0xffffffff) + 1;
+  const toRadio = create(Mesh.ToRadioSchema, {
+    payloadVariant: { case: "wantConfigId", value: nonce },
+  });
+  return toBinary(Mesh.ToRadioSchema, toRadio);
+}
+
 export function buildTextToRadio(text: string): Uint8Array {
   const packet = create(Mesh.MeshPacketSchema, {
     to: 0xffffffff,
@@ -152,7 +161,12 @@ export function useBLE() {
         isConnecting: false,
       });
 
-      // Initial drain
+      // REQUIRED handshake: tell the firmware we are a new client.
+      // Without this the node will not forward received LoRa messages to fromRadio.
+      console.log("BLE: Sending wantConfigId handshake...");
+      await toRadioChar.writeValue(buildWantConfig());
+
+      // Initial drain — receives NodeInfo / config / any queued LoRa messages
       console.log("BLE: Initial fromRadio drain...");
       await readAllFromRadio(fromRadioChar);
 
