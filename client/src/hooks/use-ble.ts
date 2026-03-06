@@ -31,6 +31,7 @@ export function useBLE() {
     try {
       // Meshtastic Service UUID: 6ba1b218-15a8-461f-a635-012110031999
       const MESHTASTIC_SERVICE_UUID = "6ba1b218-15a8-461f-a635-012110031999";
+      const MESHTASTIC_DATA_CHAR_UUID = "8ba1b218-15a8-461f-a635-012110031999";
       
       console.log("Requesting Meshtastic device...");
       const device = await (navigator as any).bluetooth.requestDevice({
@@ -43,9 +44,18 @@ export function useBLE() {
       console.log("Connecting to GATT Server...");
       const server = await device.gatt.connect();
       
+      console.log("Getting Service...");
+      const service = await server.getPrimaryService(MESHTASTIC_SERVICE_UUID);
+      
+      console.log("Getting Characteristic...");
+      const characteristic = await service.getCharacteristic(MESHTASTIC_DATA_CHAR_UUID);
+      
+      // Store reference for writing (in a real app you'd use a ref or state)
+      (window as any).meshtasticChar = characteristic;
+
       setState({
         isConnected: true,
-        deviceName: device.name || "Meshtastic Device",
+        deviceName: device.name || "Meshtastic Node",
         isConnecting: false,
       });
 
