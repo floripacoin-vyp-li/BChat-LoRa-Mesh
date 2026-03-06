@@ -60,6 +60,18 @@ export function useBLE() {
         isConnecting: false,
       });
 
+      // Insert a system message into the chat history locally
+      await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender: 'system',
+          content: `UPLINK ESTABLISHED: Successfully bridged to ${device.name || "device"}. LoRa terminal ready.`
+        })
+      });
+      // Trigger a refresh of the messages
+      (window as any).queryClient?.invalidateQueries({ queryKey: ['/api/messages'] });
+
       const onDisconnect = () => {
         console.log("GATT Disconnected");
         setState({
