@@ -59,6 +59,11 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use((_req, res, next) => {
+  res.setHeader("Permissions-Policy", "bluetooth=(self)");
+  next();
+});
+
 (async () => {
   await registerRoutes(httpServer, app);
 
