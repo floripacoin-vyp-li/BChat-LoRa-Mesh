@@ -61,16 +61,33 @@ export function useBLE() {
       });
 
       // Insert a system message into the chat history locally
-      await fetch('/api/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sender: 'system',
-          content: `UPLINK ESTABLISHED: Successfully bridged to ${device.name || "device"}. LoRa terminal ready.`
-        })
-      });
-      // Trigger a refresh of the messages
-      (window as any).queryClient?.invalidateQueries({ queryKey: ['/api/messages'] });
+      try {
+        console.log("Posting system message...");
+        const response = await fetch('/api/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sender: 'system',
+            content: `UPLINK ESTABLISHED: Successfully bridged to ${device.name || "device"}. LoRa terminal ready.`
+          })
+        });
+        
+        if (!response.ok) {
+           throw new Error(`Failed to post system message: ${response.statusText}`);
+        }
+        
+        console.log("System message posted successfully");
+        // Trigger a refresh of the messages
+        window.dispatchEvent(new CustomEvent('ble-connected'));
+        (window as any).queryClient?.invalidateQueries({ queryKey: ['/api/messages'] });
+      } catch (err) {
+        console.error("Failed to post system message:", err);
+        // Fallback: toast if the message couldn't be posted
+        toast({
+          title: "Uplink Established",
+          description: `Successfully bridged to ${device.name || "device"}.`,
+        });
+      }
 
       const onDisconnect = () => {
         console.log("GATT Disconnected");

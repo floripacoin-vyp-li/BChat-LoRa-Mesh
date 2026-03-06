@@ -7,9 +7,18 @@ import { useMessages } from "@/hooks/use-messages";
 import { useBLE } from "@/hooks/use-ble";
 
 export default function Dashboard() {
-  const { data: messages, isLoading } = useMessages();
+  const { data: messages, isLoading, refetch } = useMessages();
   const ble = useBLE();
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleConnected = () => {
+      console.log("BLE connected event received, refetching...");
+      refetch();
+    };
+    window.addEventListener('ble-connected', handleConnected);
+    return () => window.removeEventListener('ble-connected', handleConnected);
+  }, [refetch]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
