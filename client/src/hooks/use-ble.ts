@@ -33,11 +33,9 @@ export function useBLE() {
       const MESHTASTIC_SERVICE_UUID = "6ba1b218-15a8-461f-a635-012110031999";
       const MESHTASTIC_DATA_CHAR_UUID = "8ba1b218-15a8-461f-a635-012110031999";
       
-      console.log("Requesting Meshtastic device...");
+      console.log("Requesting device with any filter...");
       const device = await (navigator as any).bluetooth.requestDevice({
-        filters: [
-          { services: [MESHTASTIC_SERVICE_UUID] }
-        ],
+        acceptAllDevices: true,
         optionalServices: [MESHTASTIC_SERVICE_UUID]
       });
 
