@@ -33,16 +33,10 @@ export function useBLE() {
       const DATA_UUID = "8ba1b218-15a8-461f-a635-012110031999";
       
       console.log("BLE: Opening device picker...");
-      // Using a very simple requestDevice call for maximum compatibility
+      // Reverting to the most compatible requestDevice call
       const device = await (navigator as any).bluetooth.requestDevice({
-        filters: [{ services: [SERVICE_UUID] }],
+        acceptAllDevices: true,
         optionalServices: [SERVICE_UUID]
-      }).catch(async (e: any) => {
-        console.warn("BLE: Filtered request failed, trying acceptAllDevices", e);
-        return await (navigator as any).bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: [SERVICE_UUID]
-        });
       });
 
       console.log("BLE: Device selected:", device.name);
