@@ -140,15 +140,30 @@ export function useBLE() {
       });
 
       // Initial sync: read all pending packets from node
-      console.log("BLE: Reading initial packets from radio...");
-      await readAllFromRadio(fromRadioChar);
+      // Wrapped in try/catch — a read error here must not fail the whole connection
+      try {
+        console.log("BLE: Reading initial packets from radio...");
+        await readAllFromRadio(fromRadioChar);
+      } catch (e) {
+        console.warn("BLE: Initial fromRadio read failed (non-fatal):", e);
+      }
 
       // Subscribe to fromNum — fires when a new packet is available in fromRadio
-      await fromNumChar.startNotifications();
-      fromNumChar.addEventListener("characteristicvaluechanged", async () => {
-        console.log("BLE: fromNum notify — reading fromRadio...");
-        await readAllFromRadio(fromRadioChar);
-      });
+      // Also wrapped: some firmware versions may not support NOTIFY on fromNum
+      try {
+        await fromNumChar.startNotifications();
+        fromNumChar.addEventListener("characteristicvaluechanged", async () => {
+          console.log("BLE: fromNum notify — reading fromRadio...");
+          try {
+            await readAllFromRadio(fromRadioChar);
+          } catch (e) {
+            console.warn("BLE: fromRadio read on notify failed:", e);
+          }
+        });
+        console.log("BLE: Subscribed to fromNum notifications.");
+      } catch (e) {
+        console.warn("BLE: Could not subscribe to fromNum (non-fatal):", e);
+      }
 
       console.log("BLE: Fully initialised. Listening for LoRa messages.");
 
