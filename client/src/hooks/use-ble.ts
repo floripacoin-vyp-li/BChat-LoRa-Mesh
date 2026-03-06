@@ -50,11 +50,22 @@ export function useBLE() {
         isConnecting: false,
       });
 
-      const service = await server.getPrimaryService(SERVICE_UUID);
-      const characteristic = await service.getCharacteristic(DATA_UUID);
-      
-      (window as any).meshtasticChar = characteristic;
-      (window as any).meshtasticDevice = device;
+      // Start notifications to keep link active
+      try {
+        const service = await server.getPrimaryService(SERVICE_UUID);
+        const characteristic = await service.getCharacteristic(DATA_UUID);
+        
+        (window as any).meshtasticChar = characteristic;
+        (window as any).meshtasticDevice = device;
+
+        await characteristic.startNotifications();
+        characteristic.addEventListener('characteristicvaluechanged', (event: any) => {
+          console.log("BLE: Data received", event.target.value);
+        });
+        console.log("BLE: Notifications started");
+      } catch (e) {
+        console.warn("BLE: Service/Char lookup failed, but GATT is alive", e);
+      }
 
       // System message
       fetch('/api/messages', {
