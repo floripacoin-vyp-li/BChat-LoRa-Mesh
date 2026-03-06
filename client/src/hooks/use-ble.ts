@@ -33,24 +33,15 @@ export function useBLE() {
       const MESHTASTIC_SERVICE_UUID = "6ba1b218-15a8-461f-a635-012110031999";
       const MESHTASTIC_DATA_CHAR_UUID = "8ba1b218-15a8-461f-a635-012110031999";
       
-      console.log("Requesting device with relaxed filters...");
-      // Try with filters first, but allow all devices as fallback in case of advertisement issues
+      console.log("Requesting device...");
+      // Reverting to a more standard requestDevice call that often has better compatibility
       const device = await (navigator as any).bluetooth.requestDevice({
-        filters: [{ services: [MESHTASTIC_SERVICE_UUID] }],
+        acceptAllDevices: true,
         optionalServices: [MESHTASTIC_SERVICE_UUID]
-      }).catch(async () => {
-        console.log("Filtering failed, requesting all devices...");
-        return await (navigator as any).bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: [MESHTASTIC_SERVICE_UUID]
-        });
       });
 
       console.log("Connecting to GATT Server...");
-      const server = await Promise.race([
-        device.gatt.connect(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("GATT Connection timeout (15s)")), 15000))
-      ]);
+      const server = await device.gatt.connect();
       
       console.log("Getting Service...");
       const service = await server.getPrimaryService(MESHTASTIC_SERVICE_UUID);
@@ -102,13 +93,9 @@ export function useBLE() {
       });
       
       if (error.name !== 'NotFoundError') {
-        let errorMsg = error.message || "Unknown error";
-        if (error.name === 'SecurityError') errorMsg = "Bluetooth security block. Ensure HTTPS and user gesture.";
-        if (error.name === 'NetworkError') errorMsg = "GATT connection failed. Is the device in range?";
-        
         toast({
           title: "Connection Failed",
-          description: errorMsg,
+          description: error.message || "Failed to pair with device.",
           variant: "destructive",
         });
       }
