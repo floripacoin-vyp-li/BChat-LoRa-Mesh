@@ -108,11 +108,13 @@ export function useBLE() {
       });
 
       console.log("BLE: Device selected:", device.name);
+      console.log("BLE: Connecting to GATT server...");
       const server = await device.gatt.connect();
       console.log("BLE: GATT connected");
 
       let service: BluetoothRemoteGATTService;
       try {
+        console.log("BLE: Getting primary service...");
         service = await server.getPrimaryService(SERVICE_UUID);
         console.log("BLE: Meshtastic service found");
       } catch (e) {
@@ -126,9 +128,13 @@ export function useBLE() {
         return;
       }
 
+      console.log("BLE: Getting toRadio characteristic...");
       const toRadioChar = await service.getCharacteristic(TORADIO_UUID);
+      console.log("BLE: Getting fromRadio characteristic...");
       const fromRadioChar = await service.getCharacteristic(FROMRADIO_UUID);
+      console.log("BLE: Getting fromNum characteristic...");
       const fromNumChar = await service.getCharacteristic(FROMNUM_UUID);
+      console.log("BLE: All characteristics obtained");
 
       (window as any).meshtasticToRadio = toRadioChar;
       (window as any).meshtasticDevice = device;
@@ -191,12 +197,12 @@ export function useBLE() {
 
       toast({ title: "Connected", description: `Bridged to ${device.name}.` });
     } catch (error: any) {
-      console.error("BLE Error:", error);
+      console.error("BLE Error — name:", error?.name, "| message:", error?.message, "| full:", error);
       setState({ isConnected: false, deviceName: null, isConnecting: false });
-      if (error.name !== "NotFoundError") {
+      if (error?.name !== "NotFoundError") {
         toast({
           title: "Connection Failed",
-          description: error.message || "BLE pairing failed.",
+          description: `${error?.name ?? "Error"}: ${error?.message ?? "BLE pairing failed."}`,
           variant: "destructive",
         });
       }
