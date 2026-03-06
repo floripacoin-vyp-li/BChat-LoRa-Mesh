@@ -152,22 +152,22 @@ export function useBLE() {
         isConnecting: false,
       });
 
-      // Subscribe to fromNum BEFORE draining — so we don't miss notifications
-      // that arrive during the initial drain
+      // Initial drain FIRST — flush any queued startup packets (NodeInfo, MyInfo, etc.)
+      // Must happen before startNotifications to avoid concurrent reads on the same characteristic
+      console.log("BLE: Initial drain...");
+      await drainFromRadio(fromRadioChar);
+
+      // Subscribe to fromNum AFTER draining — firmware notifies when new packets arrive
       await fromNumChar.startNotifications();
       fromNumChar.addEventListener("characteristicvaluechanged", (event: Event) => {
         const v = (event.target as BluetoothRemoteGATTCharacteristic).value;
-        if (v) {
-          const fromNum = v.getUint32(0, true); // little-endian
+        if (v && v.byteLength >= 4) {
+          const fromNum = v.getUint32(0, true); // little-endian uint32
           console.log(`BLE: fromNum notify — packet #${fromNum} available`);
         }
         // Drain the queue (fire-and-forget; errors logged inside)
         drainFromRadio(fromRadioChar).catch(e => console.error("BLE: drain error:", e));
       });
-
-      // Drain any packets already queued (startup NodeInfo, MyInfo, etc.)
-      console.log("BLE: Initial drain...");
-      await drainFromRadio(fromRadioChar);
 
       // System message
       postMessage(
