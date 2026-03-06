@@ -60,7 +60,22 @@ export function useBLE() {
 
         await characteristic.startNotifications();
         characteristic.addEventListener('characteristicvaluechanged', (event: any) => {
-          console.log("BLE: Data received", event.target.value);
+          const value = event.target.value;
+          const decoder = new TextDecoder();
+          const content = decoder.decode(value);
+          console.log("BLE: Data received:", content);
+
+          // Post received message to backend
+          fetch('/api/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sender: 'node',
+              content: content
+            })
+          }).then(() => {
+            (window as any).queryClient?.invalidateQueries({ queryKey: ['/api/messages'] });
+          });
         });
         console.log("BLE: Notifications started");
       } catch (e) {

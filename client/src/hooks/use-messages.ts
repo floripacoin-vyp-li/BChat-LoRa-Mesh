@@ -29,6 +29,19 @@ export function useSendMessage() {
   return useMutation({
     mutationFn: async (message: MessageInput) => {
       const validated = api.messages.create.input.parse(message);
+      
+      // OPTIONAL: Send to Meshtastic hardware if connected
+      if (validated.sender === "user" && (window as any).meshtasticChar) {
+        try {
+          const encoder = new TextEncoder();
+          const data = encoder.encode(validated.content);
+          await (window as any).meshtasticChar.writeValue(data);
+          console.log("BLE: Transmitted to hardware:", validated.content);
+        } catch (err) {
+          console.error("BLE: Transmission failed:", err);
+        }
+      }
+
       const res = await fetch(api.messages.create.path, {
         method: api.messages.create.method,
         headers: { "Content-Type": "application/json" },
