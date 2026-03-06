@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { ShieldAlert, Signal, WifiOff } from "lucide-react";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ChatInput } from "@/components/chat-input";
@@ -10,8 +10,6 @@ export default function Dashboard() {
   const { data: messages, isLoading, refetch } = useMessages();
   const ble = useBLE();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [frequency, setFrequency] = useState("919.875");
-  const [channel, setChannel] = useState("0");
 
   useEffect(() => {
     const handleConnected = () => {
@@ -36,13 +34,7 @@ export default function Dashboard() {
       <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-500/5 rounded-full blur-[120px] pointer-events-none" />
       
       <div className="w-full max-w-4xl h-[85vh] flex flex-col relative z-10">
-        <DashboardHeader 
-          ble={ble}
-          frequency={frequency}
-          channel={channel}
-          onFrequencyChange={setFrequency}
-          onChannelChange={setChannel}
-        />
+        <DashboardHeader ble={ble} />
         
         {/* Main Terminal Area */}
         <div className="flex-1 glass-panel border-y-0 relative flex flex-col overflow-hidden bg-card/60">
@@ -101,7 +93,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <ChatInput isConnected={ble.isConnected} frequency={frequency} channel={channel} />
+        <ChatInput isConnected={ble.isConnected} />
       </div>
     </div>
   );
