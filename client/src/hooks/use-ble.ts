@@ -29,16 +29,23 @@ export function useBLE() {
     setState((prev) => ({ ...prev, isConnecting: true }));
 
     try {
-      // Mock connection request to Meshtastic or any BLE device
+      // Meshtastic Service UUID: 6ba1b218-15a8-461f-a635-012110031999
+      const MESHTASTIC_SERVICE_UUID = "6ba1b218-15a8-461f-a635-012110031999";
+      
+      console.log("Requesting Meshtastic device...");
       const device = await (navigator as any).bluetooth.requestDevice({
-        acceptAllDevices: true,
-        // In a real Meshtastic app, you'd filter by specific service UUIDs:
-        // filters: [{ services: ['...'] }]
+        filters: [
+          { services: [MESHTASTIC_SERVICE_UUID] }
+        ],
+        optionalServices: [MESHTASTIC_SERVICE_UUID]
       });
 
+      console.log("Connecting to GATT Server...");
+      const server = await device.gatt.connect();
+      
       setState({
         isConnected: true,
-        deviceName: device.name || "Unknown Device",
+        deviceName: device.name || "Meshtastic Device",
         isConnecting: false,
       });
 
