@@ -29,104 +29,68 @@ export function useBLE() {
     setState((prev) => ({ ...prev, isConnecting: true }));
 
     try {
-      // Meshtastic Service UUID: 6ba1b218-15a8-461f-a635-012110031999
-      const MESHTASTIC_SERVICE_UUID = "6ba1b218-15a8-461f-a635-012110031999";
-      const MESHTASTIC_DATA_CHAR_UUID = "8ba1b218-15a8-461f-a635-012110031999";
+      const SERVICE_UUID = "6ba1b218-15a8-461f-a635-012110031999";
+      const DATA_UUID = "8ba1b218-15a8-461f-a635-012110031999";
       
-      console.log("Requesting device...");
-      // Reverting to a more standard requestDevice call that often has better compatibility
+      console.log("BLE: Opening device picker...");
+      // Using a very simple requestDevice call for maximum compatibility
       const device = await (navigator as any).bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: [MESHTASTIC_SERVICE_UUID]
+        filters: [{ services: [SERVICE_UUID] }],
+        optionalServices: [SERVICE_UUID]
+      }).catch(async (e: any) => {
+        console.warn("BLE: Filtered request failed, trying acceptAllDevices", e);
+        return await (navigator as any).bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [SERVICE_UUID]
+        });
       });
 
-      console.log("Connecting to GATT Server...");
+      console.log("BLE: Device selected:", device.name);
       const server = await device.gatt.connect();
       
-      console.log("Getting Service...");
-      const service = await server.getPrimaryService(MESHTASTIC_SERVICE_UUID);
-      
-      console.log("Getting Characteristic...");
-      const characteristic = await service.getCharacteristic(MESHTASTIC_DATA_CHAR_UUID);
-      
-      // Store references
-      (window as any).meshtasticChar = characteristic;
-      (window as any).meshtasticDevice = device;
-
-      console.log("Setting connected state...");
+      console.log("BLE: GATT connected");
+      // CRITICAL: We set state as soon as GATT connects
       setState({
         isConnected: true,
         deviceName: device.name || "Meshtastic Node",
         isConnecting: false,
       });
 
-      // Insert a system message into the chat history locally
-      try {
-        console.log("Posting system message...");
-        const response = await fetch('/api/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sender: 'system',
-            content: `UPLINK ESTABLISHED: Successfully bridged to ${device.name || "device"}. LoRa terminal ready.`
-          })
-        });
-        
-        if (!response.ok) {
-           throw new Error(`Failed to post system message: ${response.statusText}`);
-        }
-        
-        console.log("System message posted successfully");
-        // Trigger a refresh of the messages
+      const service = await server.getPrimaryService(SERVICE_UUID);
+      const characteristic = await service.getCharacteristic(DATA_UUID);
+      
+      (window as any).meshtasticChar = characteristic;
+      (window as any).meshtasticDevice = device;
+
+      // System message
+      fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender: 'system',
+          content: `UPLINK ESTABLISHED: Bridged to ${device.name || "device"}.`
+        })
+      }).then(() => {
         window.dispatchEvent(new CustomEvent('ble-connected'));
         (window as any).queryClient?.invalidateQueries({ queryKey: ['/api/messages'] });
-      } catch (err) {
-        console.error("Failed to post system message:", err);
-        // Fallback: toast if the message couldn't be posted
-        toast({
-          title: "Uplink Established",
-          description: `Successfully bridged to ${device.name || "device"}.`,
-        });
-      }
+      });
 
       const onDisconnect = () => {
-        console.log("GATT Disconnected");
-        setState({
-          isConnected: false,
-          deviceName: null,
-          isConnecting: false,
-        });
-        toast({
-          title: "Disconnected",
-          description: "Connection to Meshtastic lost.",
-          variant: "destructive",
-        });
+        console.log("BLE: Disconnected");
+        setState({ isConnected: false, deviceName: null, isConnecting: false });
+        toast({ title: "Disconnected", variant: "destructive" });
       };
       
       device.addEventListener('gattserverdisconnected', onDisconnect);
       (window as any)._onDisconnect = onDisconnect;
 
-      toast({
-        title: "Connected",
-        description: `Successfully bridged to ${device.name || "device"}.`,
-        style: { borderLeft: "4px solid hsl(var(--primary))" },
-      });
+      toast({ title: "Connected", description: `Bridged to ${device.name}.` });
 
     } catch (error: any) {
-      console.error("BLE Connect Error:", error);
-      
-      setState({
-        isConnected: false,
-        deviceName: null,
-        isConnecting: false,
-      });
-      
+      console.error("BLE Error:", error);
+      setState({ isConnected: false, deviceName: null, isConnecting: false });
       if (error.name !== 'NotFoundError') {
-        toast({
-          title: "Connection Failed",
-          description: error.message || "Failed to pair with device.",
-          variant: "destructive",
-        });
+        toast({ title: "Connection Failed", description: error.message, variant: "destructive" });
       }
     } finally {
       setState((prev) => ({ ...prev, isConnecting: false }));
