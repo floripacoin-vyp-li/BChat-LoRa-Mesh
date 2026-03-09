@@ -1,6 +1,7 @@
-import { Activity, Bluetooth, Power, Trash2, Usb } from "lucide-react";
+import { Activity, Bluetooth, Power, Radio, Trash2, Usb } from "lucide-react";
 import { useBLE } from "@/hooks/use-ble";
 import { useSerial } from "@/hooks/use-serial";
+import { useBitChat } from "@/hooks/use-bitchat";
 import { useClearMessages } from "@/hooks/use-messages";
 import {
   AlertDialog,
@@ -17,14 +18,16 @@ import {
 interface DashboardHeaderProps {
   ble: ReturnType<typeof useBLE>;
   serial: ReturnType<typeof useSerial>;
+  bitchat: ReturnType<typeof useBitChat>;
 }
 
 const serialSupported = typeof navigator !== "undefined" && "serial" in navigator;
 
-export function DashboardHeader({ ble, serial }: DashboardHeaderProps) {
+export function DashboardHeader({ ble, serial, bitchat }: DashboardHeaderProps) {
   const { mutate: clearMessages, isPending: isClearing } = useClearMessages();
   const anyConnected = ble.isConnected || serial.isConnected;
   const anyConnecting = ble.isConnecting || serial.isConnecting;
+  const blbActive = anyConnected && bitchat.isConnected;
 
   return (
     <header className="glass-panel border-b-0 rounded-t-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 relative overflow-hidden">
@@ -32,13 +35,24 @@ export function DashboardHeader({ ble, serial }: DashboardHeaderProps) {
 
       <div className="flex items-center gap-3 relative z-10">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-card to-background border border-white/10 flex items-center justify-center shadow-lg">
-          <Activity className="text-primary animate-pulse" size={20} />
+          <Activity className={`${blbActive ? "text-cyan-400" : "text-primary"} animate-pulse`} size={20} />
         </div>
         <div>
           <h1 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
-            Bit Chat <span className="text-primary font-mono text-xs px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">BRIDGE</span>
+            Bit Chat{" "}
+            <span className={`font-mono text-xs px-2 py-0.5 rounded-full border ${
+              blbActive
+                ? "text-cyan-400 bg-cyan-400/10 border-cyan-400/30"
+                : "text-primary bg-primary/10 border-primary/20"
+            }`}>
+              {blbActive ? "BLB" : "BRIDGE"}
+            </span>
           </h1>
-          <p className="text-xs text-muted-foreground font-mono">Meshtastic LoRa Protocol</p>
+          <p className="text-xs text-muted-foreground font-mono">
+            {blbActive
+              ? `LoRa ↔ BitChat · ${bitchat.peerCount} peer${bitchat.peerCount !== 1 ? "s" : ""}`
+              : "Meshtastic LoRa Protocol"}
+          </p>
         </div>
       </div>
 
@@ -75,8 +89,8 @@ export function DashboardHeader({ ble, serial }: DashboardHeaderProps) {
 
         <div className="h-6 w-px bg-white/10 mx-1 hidden sm:block" />
 
+        {/* LoRa transport (BLE / USB) */}
         {anyConnected ? (
-          /* Disconnect button — shows which transport is active */
           <button
             onClick={ble.isConnected ? ble.disconnect : serial.disconnect}
             className="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-secondary border border-white/10 hover:bg-destructive/20 hover:border-destructive/50 hover:text-destructive text-foreground flex items-center justify-center gap-2 text-sm font-medium transition-all group"
@@ -89,7 +103,6 @@ export function DashboardHeader({ ble, serial }: DashboardHeaderProps) {
             </span>
           </button>
         ) : (
-          /* Both connect buttons when nothing is active */
           <div className="flex gap-2 flex-1 sm:flex-none">
             <button
               onClick={ble.connect}
@@ -112,6 +125,28 @@ export function DashboardHeader({ ble, serial }: DashboardHeaderProps) {
               <span>{serial.isConnecting ? "Opening…" : "USB"}</span>
             </button>
           </div>
+        )}
+
+        {/* BitChat BLE bridge — always independent of LoRa transport */}
+        {bitchat.isConnected ? (
+          <button
+            onClick={bitchat.disconnect}
+            className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-destructive/20 hover:border-destructive/50 hover:text-destructive flex items-center justify-center gap-2 text-sm font-medium transition-all group"
+            data-testid="button-disconnect-bitchat"
+          >
+            <Radio size={15} className="group-hover:animate-pulse" />
+            <span>BChat</span>
+            <span className="text-[10px] font-mono opacity-70">·{bitchat.peerCount}</span>
+          </button>
+        ) : (
+          <button
+            onClick={bitchat.connect}
+            className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-secondary border border-white/10 hover:bg-cyan-500/10 hover:border-cyan-500/30 hover:text-cyan-400 text-foreground flex items-center justify-center gap-2 text-sm font-semibold transition-all"
+            data-testid="button-connect-bitchat"
+          >
+            <Radio size={15} />
+            <span>BChat</span>
+          </button>
         )}
       </div>
     </header>

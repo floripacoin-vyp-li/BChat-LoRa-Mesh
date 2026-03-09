@@ -1,21 +1,24 @@
 import { useEffect, useRef } from "react";
-import { ShieldAlert, Signal, WifiOff, Bluetooth, Usb } from "lucide-react";
+import { ShieldAlert, Signal, WifiOff, Bluetooth, Usb, Radio } from "lucide-react";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ChatInput } from "@/components/chat-input";
 import { ChatMessage } from "@/components/chat-message";
 import { useMessages } from "@/hooks/use-messages";
 import { useBLE } from "@/hooks/use-ble";
 import { useSerial } from "@/hooks/use-serial";
+import { useBitChat } from "@/hooks/use-bitchat";
 
 export default function Dashboard() {
   const { data: messages, isLoading, refetch } = useMessages();
   const ble = useBLE();
   const serial = useSerial();
+  const bitchat = useBitChat();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const isConnected = ble.isConnected || serial.isConnected;
   const activeDeviceName = ble.isConnected ? ble.deviceName : serial.isConnected ? serial.deviceName : null;
   const activeTransport = ble.isConnected ? "ble" : serial.isConnected ? "serial" : null;
+  const blbActive = isConnected && bitchat.isConnected;
 
   useEffect(() => {
     const handleConnected = () => refetch();
@@ -35,16 +38,29 @@ export default function Dashboard() {
       <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-500/5 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="w-full max-w-4xl h-[85vh] flex flex-col relative z-10">
-        <DashboardHeader ble={ble} serial={serial} />
+        <DashboardHeader ble={ble} serial={serial} bitchat={bitchat} />
 
         <div className="flex-1 glass-panel border-y-0 relative flex flex-col overflow-hidden bg-card/60">
           {/* Connection Status Banner */}
           <div className={`px-4 py-1.5 text-xs font-mono uppercase tracking-widest flex items-center justify-center gap-3 border-b ${
-            isConnected
+            blbActive
+              ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/20"
+              : isConnected
               ? "bg-primary/10 text-primary border-primary/20"
               : "bg-destructive/10 text-destructive border-destructive/20"
           }`}>
-            {isConnected ? (
+            {blbActive ? (
+              <>
+                <Signal size={12} className="animate-pulse" />
+                <span>BLB Active: {activeDeviceName}</span>
+                <span className="flex items-center gap-1 opacity-60">
+                  {activeTransport === "ble" ? <Bluetooth size={10} /> : <Usb size={10} />}
+                  LoRa ↔
+                  <Radio size={10} />
+                  {bitchat.peerCount} BitChat
+                </span>
+              </>
+            ) : isConnected ? (
               <>
                 <Signal size={12} className="animate-pulse" />
                 <span>Uplink Established: {activeDeviceName}</span>
@@ -81,7 +97,7 @@ export default function Dashboard() {
                 <div>
                   <p className="mb-2 uppercase">Local log empty</p>
                   <p className="text-xs max-w-xs leading-relaxed opacity-60">
-                    Connect to a Meshtastic device via BLE or USB to begin receiving and transmitting LoRa packets.
+                    Connect to a Meshtastic device via BLE or USB, then connect a BitChat peer to activate the BLB.
                   </p>
                 </div>
               </div>

@@ -2,8 +2,10 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { queryClient } from "./lib/queryClient";
+import { initBridge } from "./lib/bridge";
 
 (window as any).queryClient = queryClient;
+initBridge();
 
 createRoot(document.getElementById("root")!).render(<App />);
 

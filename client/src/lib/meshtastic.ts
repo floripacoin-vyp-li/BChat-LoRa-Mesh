@@ -6,6 +6,9 @@ export const SERIAL_START1 = 0x94;
 export const SERIAL_START2 = 0xc3;
 export const SERIAL_MAX_PACKET = 512;
 
+// BLB (BitChat LoRa Bridge) — opaque BitChat bytes carried over LoRa
+export const BITCHAT_PORT = 256; // Meshtastic PRIVATE_APP portnum
+
 export function frameForSerial(payload: Uint8Array): Uint8Array {
   const len = payload.length;
   const framed = new Uint8Array(4 + len);
@@ -50,6 +53,7 @@ export function processFromRadio(bytes: Uint8Array): void {
 
       if (payloadCase === "decoded") {
         const decoded = packet.payloadVariant.value;
+
         if (decoded.portnum === Portnums.PortNum.TEXT_MESSAGE_APP) {
           const text = new TextDecoder().decode(decoded.payload);
           console.log("Mesh: Text message:", text);
@@ -62,6 +66,21 @@ export function processFromRadio(bytes: Uint8Array): void {
               (window as any).queryClient?.invalidateQueries({ queryKey: ["/api/messages"] });
             });
           }
+        } else if (decoded.portnum === BITCHAT_PORT) {
+          // BLB: raw BitChat bytes arrived over LoRa — relay to connected BLE peers
+          const bytes = decoded.payload;
+          console.log(`BLB: LoRa → BitChat (${bytes.length}B from ${senderLabel})`);
+          (window as any).bitchatSend?.(bytes);
+          fetch("/api/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sender: "system",
+              content: `[BLB] LoRa → BitChat: ${bytes.length}B from ${senderLabel}`,
+            }),
+          }).then(() => {
+            (window as any).queryClient?.invalidateQueries({ queryKey: ["/api/messages"] });
+          });
         }
       } else if (payloadCase === "encrypted") {
         console.log("Mesh: Encrypted packet — channel key mismatch or non-default channel");
@@ -89,6 +108,24 @@ export function buildTextToRadio(text: string): Uint8Array {
       value: create(Mesh.DataSchema, {
         portnum: Portnums.PortNum.TEXT_MESSAGE_APP,
         payload: new TextEncoder().encode(text),
+      }),
+    },
+  });
+  const toRadio = create(Mesh.ToRadioSchema, {
+    payloadVariant: { case: "packet", value: packet },
+  });
+  return toBinary(Mesh.ToRadioSchema, toRadio);
+}
+
+export function buildBitchatToRadio(bytes: Uint8Array): Uint8Array {
+  const packet = create(Mesh.MeshPacketSchema, {
+    to: 0xffffffff,
+    wantAck: false,
+    payloadVariant: {
+      case: "decoded",
+      value: create(Mesh.DataSchema, {
+        portnum: BITCHAT_PORT,
+        payload: bytes,
       }),
     },
   });
