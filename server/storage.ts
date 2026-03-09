@@ -4,7 +4,7 @@ import {
   type InsertMessage,
   type Message
 } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, asc } from "drizzle-orm";
 
 export interface IStorage {
   getMessages(): Promise<Message[]>;
@@ -14,7 +14,7 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   async getMessages(): Promise<Message[]> {
-    return await db.select().from(messages);
+    return await db.select().from(messages).orderBy(asc(messages.id));
   }
 
   async createMessage(insertMessage: InsertMessage): Promise<Message> {
