@@ -62,7 +62,9 @@ async function runSerialReader(
             break;
 
           case ParseState.WAIT_START2:
-            state = byte === SERIAL_START2 ? ParseState.READ_LEN_MSB : ParseState.WAIT_START1;
+            if (byte === SERIAL_START2) state = ParseState.READ_LEN_MSB;
+            else if (byte === SERIAL_START1) state = ParseState.WAIT_START2;
+            else state = ParseState.WAIT_START1;
             break;
 
           case ParseState.READ_LEN_MSB:
@@ -133,6 +135,14 @@ export function useSerial() {
       serialWriter = port.writable.getWriter();
       serialReader = port.readable.getReader();
 
+      // Assert DTR+RTS — some firmware versions require this before forwarding packets
+      try {
+        await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+        console.log("Serial: DTR/RTS asserted");
+      } catch (_) {
+        console.log("Serial: setSignals not supported on this platform");
+      }
+
       (window as any)._meshtasticTransport = "serial";
       (window as any).meshtasticSend = serialSend;
 
@@ -145,15 +155,10 @@ export function useSerial() {
 
       setState({ isConnected: true, deviceName: portLabel, isConnecting: false });
 
-      // Required handshake: triggers config download + LoRa forwarding
-      console.log("Serial: Sending wantConfigId handshake...");
-      await serialSend(buildWantConfig());
-
-      postSystemMessage(`UPLINK ESTABLISHED: Bridged to ${portLabel} via Serial. LoRa terminal active.`);
-
-      toast({ title: "Serial Connected", description: `Bridged to ${portLabel}.` });
-
-      // Start the reader loop — runs until the port closes
+      // Start the reader loop FIRST so no bytes are missed when the firmware
+      // sends its config burst in response to the wantConfigId handshake below.
+      // Reset the guard to ensure a clean start regardless of prior session state.
+      serialReading = false;
       runSerialReader(serialReader, () => {
         if ((window as any)._meshtasticTransport === "serial") {
           (window as any).meshtasticSend = undefined;
@@ -162,6 +167,14 @@ export function useSerial() {
         setState({ isConnected: false, deviceName: null, isConnecting: false });
         toast({ title: "Serial Disconnected", description: "USB link lost.", variant: "destructive" });
       });
+
+      // Required handshake: triggers config download + LoRa forwarding.
+      // Sent AFTER the reader is running so we catch every response byte.
+      console.log("Serial: Sending wantConfigId handshake...");
+      await serialSend(buildWantConfig());
+
+      postSystemMessage(`UPLINK ESTABLISHED: Bridged to ${portLabel} via Serial. LoRa terminal active.`);
+      toast({ title: "Serial Connected", description: `Bridged to ${portLabel}.` });
 
     } catch (error: any) {
       console.error("Serial Error:", error?.name, error?.message);
