@@ -21,6 +21,15 @@ let onDisconnectHandler: (() => void) | null = null;
 let fromNumHandler: (() => void) | null = null;
 let cachedFromNumChar: BluetoothRemoteGATTCharacteristic | null = null;
 
+// Node ID (number) → short name, populated from nodeInfo packets during config download
+const nodeNames = new Map<number, string>();
+
+function resolveNodeName(nodeNum: number): string {
+  const name = nodeNames.get(nodeNum);
+  if (name && name.trim().length > 0) return name.trim();
+  return (nodeNum >>> 0).toString(16).toUpperCase();
+}
+
 async function readAllFromRadio(fromRadioChar: BluetoothRemoteGATTCharacteristic): Promise<void> {
   if (isReading) {
     console.log("BLE: read already in progress, skipping");
@@ -47,11 +56,22 @@ function processFromRadio(bytes: Uint8Array): void {
     const variant = fromRadio.payloadVariant.case;
     console.log("BLE: FromRadio packet:", variant);
 
+    // Capture short names from nodeInfo packets delivered during config download
+    if (variant === "nodeInfo") {
+      const nodeInfo = fromRadio.payloadVariant.value;
+      const shortName = nodeInfo.user?.shortName;
+      if (nodeInfo.num && shortName) {
+        nodeNames.set(nodeInfo.num, shortName);
+        console.log(`BLE: Registered node 0x${(nodeInfo.num >>> 0).toString(16).toUpperCase()} → "${shortName}"`);
+      }
+      return;
+    }
+
     if (variant === "packet") {
       const packet = fromRadio.payloadVariant.value;
-      const from = (packet.from >>> 0).toString(16).toUpperCase();
       const payloadCase = packet.payloadVariant.case;
-      console.log(`BLE: Mesh packet from 0x${from}, payload: ${payloadCase}`);
+      const senderLabel = resolveNodeName(packet.from);
+      console.log(`BLE: Mesh packet from "${senderLabel}", payload: ${payloadCase}`);
 
       if (payloadCase === "decoded") {
         const decoded = packet.payloadVariant.value;
@@ -63,7 +83,7 @@ function processFromRadio(bytes: Uint8Array): void {
             fetch("/api/messages", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ sender: "node", content: `[${from}] ${text}` }),
+              body: JSON.stringify({ sender: "node", content: `[${senderLabel}] ${text}` }),
             }).then(() => {
               (window as any).queryClient?.invalidateQueries({ queryKey: ["/api/messages"] });
             });
