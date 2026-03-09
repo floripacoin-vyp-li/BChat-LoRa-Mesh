@@ -1,4 +1,5 @@
-import { Activity, Bluetooth, Power, Radio, Trash2, Usb } from "lucide-react";
+import { Activity, Bluetooth, Cpu, Power, Radio, Trash2, Usb } from "lucide-react";
+import { Link } from "wouter";
 import { useBLE } from "@/hooks/use-ble";
 import { useSerial } from "@/hooks/use-serial";
 import { useBitChat } from "@/hooks/use-bitchat";
@@ -57,6 +58,17 @@ export function DashboardHeader({ ble, serial, bitchat }: DashboardHeaderProps) 
       </div>
 
       <div className="flex items-center gap-3 w-full sm:w-auto relative z-10 flex-wrap">
+        <Link href="/firmware">
+          <button
+            className="px-3 py-2 rounded-lg border border-white/10 text-muted-foreground hover:bg-primary/10 hover:border-primary/30 hover:text-primary flex items-center gap-1.5 text-xs font-mono transition-colors"
+            title="BLB Node Firmware for ESP32"
+            data-testid="link-firmware"
+          >
+            <Cpu size={12} />
+            <span className="hidden sm:inline">Firmware</span>
+          </button>
+        </Link>
+
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <button

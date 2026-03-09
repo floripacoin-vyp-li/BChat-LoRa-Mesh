@@ -17,8 +17,10 @@ A web PWA that bridges the BitChat BLE mesh network with the Meshtastic LoRa mes
 | `client/src/hooks/use-bitchat.ts` | Web Bluetooth hook — connects to BitChat peers (NUS service) |
 | `client/src/lib/meshtastic.ts` | Shared protocol logic: framing, protobuf encode/decode, node name registry |
 | `client/src/lib/bridge.ts` | BLB bridge glue: wires `bitchatReceived` → `meshtasticSend` |
-| `client/src/components/dashboard-header.tsx` | Header with BLE / USB / BChat connect buttons |
+| `client/src/components/dashboard-header.tsx` | Header with BLE / USB / BChat / Firmware nav buttons |
 | `client/src/pages/dashboard.tsx` | Main chat UI |
+| `client/src/pages/firmware.tsx` | `/firmware` page — ESP32 setup guide + firmware download |
+| `firmware/blb-esp32/blb-esp32.ino` | Arduino sketch for standalone BLB hardware node |
 | `server/storage.ts` | PostgreSQL message persistence |
 | `client/public/sw.js` | Service worker for PWA offline support |
 | `client/public/manifest.json` | PWA manifest |
@@ -52,6 +54,49 @@ The BLB is active when both a Meshtastic transport AND at least one BitChat BLE 
 - toRadio (write): `f75c76d2-129e-4dad-a1dd-7866124401e7`
 - fromRadio (read): `2c55e69e-4993-11ed-b878-0242ac120002`
 - fromNum (notify): `ed9da18c-a800-4f66-a670-aa7547e34453`
+
+## BLB Node — ESP32 Hardware Firmware
+
+A standalone hardware companion that lets ANY nearby BitChat phone connect automatically (no web app, no pairing prompt). The ESP32 advertises as a BitChat-compatible BLE peripheral (Nordic UART Service) and relays messages over LoRa between nodes.
+
+### Firmware location
+`firmware/blb-esp32/blb-esp32.ino` — single Arduino sketch, also displayed/downloadable at `/firmware` in the web app.
+
+### Supported Hardware
+| Board | Radio | Price |
+|---|---|---|
+| TTGO LoRa32 V2 | SX1276 | ~$15 |
+| Heltec WiFi LoRa 32 V3 (recommended) | SX1262 | ~$20 |
+
+### Required Arduino Libraries
+- **RadioLib** (jgromes) — unified LoRa driver for SX1276 + SX1262
+- **U8g2** (olikraus) — OLED display (optional)
+- ESP32 BLE Arduino — bundled with the ESP32 board package
+
+### BLB LoRa Packet Format
+```
+[MAGIC: 0x42 0x4C 0x42] [TTL: 1B] [ID: 2B random] [LEN: 2B] [PAYLOAD: N bytes]
+```
+- Magic = ASCII "BLB"
+- TTL starts at 3; each relay hop decrements it. Dropped at 0.
+- ID is random per-packet; 16-ID ring buffer prevents echo loops.
+- Payload = raw BitChat bytes (end-to-end encryption preserved).
+
+### LoRa RF Settings (Meshtastic LongFast compatible)
+- SF9, BW 125 kHz, CR 4/7, 17 dBm
+- Frequency: 915 MHz (Americas) / 868 MHz (Europe) / 433 MHz (Asia)
+
+### Configuration `#define`s at top of sketch
+| Define | Default | Description |
+|---|---|---|
+| `BOARD_TTGO_LORA32_V2` or `BOARD_HELTEC_V3` | TTGO | Board selection |
+| `BLB_NAME` | "BLB-Bridge" | BLE advertised name |
+| `LORA_FREQ` | 915.0 | LoRa frequency in MHz |
+| `BLB_TTL` | 3 | Max relay hops |
+| `OLED_ENABLED` | true | Enable OLED display |
+
+### Web App `/firmware` Page
+Provides: hardware table with purchase links, Arduino IDE setup steps, configuration guide, full firmware code with Copy + Download buttons, flashing instructions, usage guide.
 
 ## Important Notes
 - Web Bluetooth and Web Serial only work in Chrome/Edge (not in iframes — use a standalone tab)
