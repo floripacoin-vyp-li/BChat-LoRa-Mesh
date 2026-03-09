@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useToast } from "./use-toast";
 
 const BITCHAT_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
@@ -7,13 +7,16 @@ const BITCHAT_RX     = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; // write  → we 
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Guard so auto-connect only runs once per page load
+let autoConnectRan = false;
+
 interface BitChatPeer {
   device: BluetoothDevice;
   rxChar: BluetoothRemoteGATTCharacteristic;
   name: string;
 }
 
-// Module-level: persists across renders, supports multiple simultaneous peers
+// Module-level peer list — persists across renders, supports multiple connections
 const peers: BitChatPeer[] = [];
 
 async function sendToPeers(bytes: Uint8Array): Promise<void> {
@@ -26,9 +29,9 @@ async function sendToPeers(bytes: Uint8Array): Promise<void> {
   }
 }
 
-// Retry getPrimaryService up to maxAttempts times with a delay between each.
-// Some GATT stacks (especially iOS) need a moment after connect() before they
-// are ready to enumerate services.
+// Retry getPrimaryService up to maxAttempts with a delay between each.
+// GATT stacks (especially on Android) often need a short pause after connect()
+// before they are ready to enumerate services.
 async function getServiceWithRetry(
   server: BluetoothRemoteGATTServer,
   serviceUuid: string,
@@ -42,9 +45,8 @@ async function getServiceWithRetry(
       return await server.getPrimaryService(serviceUuid);
     } catch (err: any) {
       lastError = err;
-      console.warn(`BitChat: getPrimaryService attempt ${attempt}/${maxAttempts} failed:`, err?.name, err?.message);
-      // NotFoundError = service definitively absent; no point retrying
-      if (err?.name === "NotFoundError") throw err;
+      console.warn(`BitChat: getPrimaryService attempt ${attempt}/${maxAttempts}:`, err?.name);
+      if (err?.name === "NotFoundError") throw err; // service absent — no point retrying
       if (attempt < maxAttempts) await sleep(delayMs);
     }
   }
@@ -53,8 +55,95 @@ async function getServiceWithRetry(
 
 export function useBitChat() {
   const [peerCount, setPeerCount] = useState(0);
+  const [isAutoConnecting, setIsAutoConnecting] = useState(false);
   const { toast } = useToast();
 
+  // Stable ref so we can call toast inside async callbacks without stale closure issues
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+
+  // Wire up a device that already has a live GATT server connection.
+  // Returns true if the BitChat NUS service was found and subscribed.
+  const setupPeer = useCallback(async (
+    device: BluetoothDevice,
+    server: BluetoothRemoteGATTServer,
+    silent = false,
+  ): Promise<boolean> => {
+    let service: BluetoothRemoteGATTService;
+    try {
+      service = await getServiceWithRetry(server, BITCHAT_SERVICE);
+    } catch {
+      server.disconnect();
+      return false;
+    }
+
+    const txChar = await service.getCharacteristic(BITCHAT_TX);
+    const rxChar = await service.getCharacteristic(BITCHAT_RX);
+
+    await txChar.startNotifications();
+    txChar.addEventListener("characteristicvaluechanged", (event: Event) => {
+      const val = (event.target as BluetoothRemoteGATTCharacteristic).value!;
+      const bytes = new Uint8Array(val.buffer);
+      (window as any).bitchatReceived?.(bytes, device.name || "BitChat");
+    });
+
+    device.addEventListener("gattserverdisconnected", () => {
+      const idx = peers.findIndex((p) => p.device === device);
+      if (idx !== -1) peers.splice(idx, 1);
+      (window as any).bitchatSend = peers.length > 0 ? sendToPeers : undefined;
+      setPeerCount(peers.length);
+      if (!silent) {
+        toastRef.current({
+          title: "BitChat Peer Lost",
+          description: `${device.name || "Peer"} disconnected from bridge.`,
+          variant: "destructive",
+        });
+      }
+    });
+
+    peers.push({ device, rxChar, name: device.name || "BitChat" });
+    (window as any).bitchatSend = sendToPeers;
+    setPeerCount(peers.length);
+    return true;
+  }, []);
+
+  // Silent background reconnect to any previously authorized BitChat devices.
+  // Calls navigator.bluetooth.getDevices() — no picker shown.
+  const autoConnect = useCallback(async () => {
+    if (autoConnectRan) return;
+    autoConnectRan = true;
+
+    const nav = navigator as any;
+    if (!("bluetooth" in nav) || typeof nav.bluetooth.getDevices !== "function") return;
+
+    let known: BluetoothDevice[] = [];
+    try {
+      known = await nav.bluetooth.getDevices();
+    } catch {
+      return;
+    }
+
+    if (known.length === 0) return;
+
+    setIsAutoConnecting(true);
+    console.log(`BitChat auto-connect: trying ${known.length} known device(s)`);
+
+    for (const device of known) {
+      try {
+        if (peers.some((p) => p.device === device)) continue;
+        const server = await device.gatt!.connect();
+        await sleep(300);
+        const ok = await setupPeer(device, server, true);
+        if (ok) console.log(`BitChat auto-connect: linked "${device.name || device.id}"`);
+      } catch {
+        // Out of range or refused — skip silently
+      }
+    }
+
+    setIsAutoConnecting(false);
+  }, [setupPeer]);
+
+  // Manual connect — shows the browser device picker
   const connect = useCallback(async () => {
     if (!("bluetooth" in navigator)) {
       toast({
@@ -66,74 +155,31 @@ export function useBitChat() {
     }
 
     try {
-      // Show ALL nearby BLE devices — avoids empty picker when BitChat isn't
-      // broadcasting its service UUID (common on iOS in background mode).
-      // optionalServices grants access to the NUS service after the user picks.
+      // acceptAllDevices: avoids empty picker when BitChat isn't advertising its NUS service UUID
+      // optionalServices: grants access to NUS service after the user picks the device
       const device = await (navigator as any).bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: [BITCHAT_SERVICE],
       });
 
       const server = await device.gatt!.connect();
+      await sleep(300); // let GATT stabilise before enumerating services
 
-      // Brief pause: some GATT stacks need a moment after connect() before
-      // they can enumerate services reliably.
-      await sleep(300);
-
-      // Attempt to get the BitChat NUS service with retries for transient errors
-      let service: BluetoothRemoteGATTService;
-      try {
-        service = await getServiceWithRetry(server, BITCHAT_SERVICE);
-      } catch (err: any) {
-        server.disconnect();
-        if (err?.name === "NotFoundError") {
-          toast({
-            title: "BitChat Not Found on That Device",
-            description: "Make sure the BitChat app is open and in the foreground on that device, then try again.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "GATT Connection Error",
-            description: "Could not read services from that device. Try moving closer or reconnecting.",
-            variant: "destructive",
-          });
-        }
-        return;
-      }
-
-      const txChar = await service.getCharacteristic(BITCHAT_TX);
-      const rxChar = await service.getCharacteristic(BITCHAT_RX);
-
-      await txChar.startNotifications();
-      txChar.addEventListener("characteristicvaluechanged", (event: Event) => {
-        const val = (event.target as BluetoothRemoteGATTCharacteristic).value!;
-        const bytes = new Uint8Array(val.buffer);
-        (window as any).bitchatReceived?.(bytes, device.name || "BitChat");
-      });
-
-      device.addEventListener("gattserverdisconnected", () => {
-        const idx = peers.findIndex((p) => p.device === device);
-        if (idx !== -1) peers.splice(idx, 1);
-        setPeerCount(peers.length);
-        (window as any).bitchatSend = peers.length > 0 ? sendToPeers : undefined;
+      const ok = await setupPeer(device, server, false);
+      if (!ok) {
         toast({
-          title: "BitChat Peer Lost",
-          description: `${device.name || "Peer"} disconnected from bridge.`,
+          title: "BitChat Not Found on That Device",
+          description: "Make sure the BitChat app is open and in the foreground on that device, then try again.",
           variant: "destructive",
         });
-      });
-
-      peers.push({ device, rxChar, name: device.name || "BitChat" });
-      setPeerCount(peers.length);
-      (window as any).bitchatSend = sendToPeers;
+        return;
+      }
 
       toast({
         title: "BitChat Peer Bridged",
         description: `"${device.name || "device"}" linked to LoRa mesh — BLB active.`,
       });
     } catch (e: any) {
-      // NotFoundError = user cancelled the picker — no toast needed
       if (e?.name !== "NotFoundError") {
         toast({
           title: "BitChat Connect Failed",
@@ -142,7 +188,7 @@ export function useBitChat() {
         });
       }
     }
-  }, [toast]);
+  }, [toast, setupPeer]);
 
   const disconnect = useCallback(async () => {
     for (const peer of [...peers]) {
@@ -156,8 +202,10 @@ export function useBitChat() {
 
   return {
     isConnected: peerCount > 0,
+    isAutoConnecting,
     peerCount,
     connect,
     disconnect,
+    autoConnect,
   };
 }

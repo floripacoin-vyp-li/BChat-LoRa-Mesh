@@ -154,11 +154,19 @@ export function DashboardHeader({ ble, serial, bitchat }: DashboardHeaderProps) 
         ) : (
           <button
             onClick={bitchat.connect}
-            title="Connect to a BitChat device — keep the BitChat app open &amp; in the foreground on your phone first"
-            className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-secondary border border-white/10 hover:bg-cyan-500/10 hover:border-cyan-500/30 hover:text-cyan-400 text-foreground flex items-center justify-center gap-2 text-sm font-semibold transition-all"
+            title={
+              bitchat.isAutoConnecting
+                ? "Auto-connecting to nearby BitChat devices…"
+                : "Connect to a BitChat device — keep the BitChat app open & in the foreground on your phone first"
+            }
+            className={`flex-1 sm:flex-none px-3 py-2 rounded-lg flex items-center justify-center gap-2 text-sm font-semibold transition-all ${
+              bitchat.isAutoConnecting
+                ? "bg-cyan-500/5 border border-cyan-500/20 text-cyan-400/50"
+                : "bg-secondary border border-white/10 hover:bg-cyan-500/10 hover:border-cyan-500/30 hover:text-cyan-400 text-foreground"
+            }`}
             data-testid="button-connect-bitchat"
           >
-            <Radio size={15} />
+            <Radio size={15} className={bitchat.isAutoConnecting ? "animate-pulse" : ""} />
             <span>BChat</span>
           </button>
         )}

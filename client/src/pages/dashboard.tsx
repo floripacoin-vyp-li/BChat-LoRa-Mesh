@@ -26,6 +26,11 @@ export default function Dashboard() {
     return () => window.removeEventListener("ble-connected", handleConnected);
   }, [refetch]);
 
+  // Auto-connect to previously authorized BitChat devices silently on load
+  useEffect(() => {
+    bitchat.autoConnect();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
