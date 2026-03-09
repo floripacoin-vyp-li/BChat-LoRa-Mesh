@@ -39,12 +39,31 @@ export function useBitChat() {
     }
 
     try {
+      // Show ALL nearby BLE devices so the picker isn't empty when BitChat
+      // is running in the background on iOS (which stops advertising the
+      // service UUID). optionalServices grants access to the NUS service
+      // after the user picks their device.
       const device = await (navigator as any).bluetooth.requestDevice({
-        filters: [{ services: [BITCHAT_SERVICE] }],
+        acceptAllDevices: true,
+        optionalServices: [BITCHAT_SERVICE],
       });
 
       const server = await device.gatt!.connect();
-      const service = await server.getPrimaryService(BITCHAT_SERVICE);
+
+      // Attempt to get the BitChat NUS service — fails if the app isn't open
+      let service: BluetoothRemoteGATTService;
+      try {
+        service = await server.getPrimaryService(BITCHAT_SERVICE);
+      } catch {
+        server.disconnect();
+        toast({
+          title: "BitChat Not Found on That Device",
+          description: "Make sure the BitChat app is open and in the foreground on that device, then try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const txChar = await service.getCharacteristic(BITCHAT_TX);
       const rxChar = await service.getCharacteristic(BITCHAT_RX);
 
@@ -76,6 +95,7 @@ export function useBitChat() {
         description: `"${device.name || "device"}" linked to LoRa mesh — BLB active.`,
       });
     } catch (e: any) {
+      // NotFoundError = user cancelled the picker — no toast needed
       if (e?.name !== "NotFoundError") {
         toast({
           title: "BitChat Connect Failed",

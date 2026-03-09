@@ -143,6 +143,7 @@ export function DashboardHeader({ ble, serial, bitchat }: DashboardHeaderProps) 
         {bitchat.isConnected ? (
           <button
             onClick={bitchat.disconnect}
+            title="Disconnect all BitChat peers"
             className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-destructive/20 hover:border-destructive/50 hover:text-destructive flex items-center justify-center gap-2 text-sm font-medium transition-all group"
             data-testid="button-disconnect-bitchat"
           >
@@ -153,6 +154,7 @@ export function DashboardHeader({ ble, serial, bitchat }: DashboardHeaderProps) 
         ) : (
           <button
             onClick={bitchat.connect}
+            title="Connect to a BitChat device — keep the BitChat app open &amp; in the foreground on your phone first"
             className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-secondary border border-white/10 hover:bg-cyan-500/10 hover:border-cyan-500/30 hover:text-cyan-400 text-foreground flex items-center justify-center gap-2 text-sm font-semibold transition-all"
             data-testid="button-connect-bitchat"
           >
