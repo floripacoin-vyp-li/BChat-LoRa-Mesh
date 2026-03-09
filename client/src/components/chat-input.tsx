@@ -4,11 +4,9 @@ import { useSendMessage } from "@/hooks/use-messages";
 
 interface ChatInputProps {
   isConnected: boolean;
-  frequency: string;
-  channel: string;
 }
 
-export function ChatInput({ isConnected, frequency, channel }: ChatInputProps) {
+export function ChatInput({ isConnected }: ChatInputProps) {
   const [content, setContent] = useState("");
   const { mutate: sendMessage, isPending } = useSendMessage();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -60,11 +58,6 @@ export function ChatInput({ isConnected, frequency, channel }: ChatInputProps) {
           </button>
         </div>
       </form>
-      
-      <div className="mt-2 flex justify-between items-center px-2 text-[10px] font-mono text-muted-foreground/60 uppercase tracking-widest">
-        <span>Channel: {channel === "0" ? "Primary (CH 0)" : `CH ${channel}`}</span>
-        <span>Freq: {frequency} MHz (LoRa)</span>
-      </div>
     </div>
   );
 }
