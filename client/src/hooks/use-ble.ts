@@ -9,14 +9,17 @@ interface BLEState {
   isConnecting: boolean;
 }
 
-// Correct Meshtastic BLE UUIDs (firmware 2.x)
 const SERVICE_UUID   = "6ba1b218-15a8-461f-9fa8-5dcae273eafd";
 const TORADIO_UUID   = "f75c76d2-129e-4dad-a1dd-7866124401e7";
 const FROMRADIO_UUID = "2c55e69e-4993-11ed-b878-0242ac120002";
 const FROMNUM_UUID   = "ed9da18c-a800-4f66-a670-aa7547e34453";
 
-// Guard against concurrent reads on the same characteristic
+// Module-level state — persists across React re-renders and reconnect attempts
 let isReading = false;
+let cachedDevice: BluetoothDevice | null = null;
+let onDisconnectHandler: (() => void) | null = null;
+let fromNumHandler: (() => void) | null = null;
+let cachedFromNumChar: BluetoothRemoteGATTCharacteristic | null = null;
 
 async function readAllFromRadio(fromRadioChar: BluetoothRemoteGATTCharacteristic): Promise<void> {
   if (isReading) {
@@ -76,7 +79,6 @@ function processFromRadio(bytes: Uint8Array): void {
 }
 
 export function buildWantConfig(): Uint8Array {
-  // Random 32-bit nonce — tells the firmware "I'm a new client, send me config + start forwarding"
   const nonce = Math.floor(Math.random() * 0xffffffff) + 1;
   const toRadio = create(Mesh.ToRadioSchema, {
     payloadVariant: { case: "wantConfigId", value: nonce },
@@ -102,6 +104,22 @@ export function buildTextToRadio(text: string): Uint8Array {
   return toBinary(Mesh.ToRadioSchema, toRadio);
 }
 
+function cleanupListeners(): void {
+  // Remove previous disconnect handler so it doesn't fire stale state updates
+  if (cachedDevice && onDisconnectHandler) {
+    cachedDevice.removeEventListener("gattserverdisconnected", onDisconnectHandler);
+    onDisconnectHandler = null;
+  }
+  // Remove previous fromNum handler to prevent duplicate message processing
+  if (cachedFromNumChar && fromNumHandler) {
+    cachedFromNumChar.removeEventListener("characteristicvaluechanged", fromNumHandler);
+    fromNumHandler = null;
+  }
+  // Cancel previous poll
+  clearInterval((window as any)._bleFromRadioPoll);
+  isReading = false;
+}
+
 export function useBLE() {
   const [state, setState] = useState<BLEState>({
     isConnected: false,
@@ -123,14 +141,27 @@ export function useBLE() {
     setState((prev) => ({ ...prev, isConnecting: true }));
 
     try {
-      console.log("BLE: Requesting device...");
-      const device = await (navigator as any).bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: [SERVICE_UUID],
-      });
+      let device: BluetoothDevice;
 
-      console.log("BLE: Device selected:", device.name);
-      const server = await device.gatt.connect();
+      // Reuse the cached device to avoid forcing the user to re-pair after disconnect
+      if (cachedDevice) {
+        console.log("BLE: Reusing cached device:", cachedDevice.name);
+        device = cachedDevice;
+      } else {
+        console.log("BLE: Requesting device...");
+        device = await (navigator as any).bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [SERVICE_UUID],
+        });
+        cachedDevice = device;
+        console.log("BLE: Device selected:", device.name);
+      }
+
+      // Clean up any leftover listeners from the previous session before connecting
+      cleanupListeners();
+
+      console.log("BLE: Connecting to GATT...");
+      const server = await device.gatt!.connect();
       console.log("BLE: GATT connected");
 
       let service: BluetoothRemoteGATTService;
@@ -151,9 +182,9 @@ export function useBLE() {
       const fromRadioChar = await service.getCharacteristic(FROMRADIO_UUID);
       const fromNumChar   = await service.getCharacteristic(FROMNUM_UUID);
 
+      cachedFromNumChar = fromNumChar;
       (window as any).meshtasticToRadio = toRadioChar;
       (window as any).meshtasticDevice  = device;
-      isReading = false; // reset guard on new connection
 
       setState({
         isConnected: true,
@@ -161,29 +192,28 @@ export function useBLE() {
         isConnecting: false,
       });
 
-      // REQUIRED handshake: tell the firmware we are a new client.
-      // Without this the node will not forward received LoRa messages to fromRadio.
+      // REQUIRED handshake: tells the firmware to start forwarding received LoRa messages
       console.log("BLE: Sending wantConfigId handshake...");
       await toRadioChar.writeValue(buildWantConfig());
 
-      // Initial drain — receives NodeInfo / config / any queued LoRa messages
+      // Initial drain — NodeInfo / config / any queued LoRa messages
       console.log("BLE: Initial fromRadio drain...");
       await readAllFromRadio(fromRadioChar);
 
       // Primary receive path: fromNum notifications
       try {
         await fromNumChar.startNotifications();
-        fromNumChar.addEventListener("characteristicvaluechanged", async () => {
+        fromNumHandler = async () => {
           console.log("BLE: fromNum notify fired — polling fromRadio");
           await readAllFromRadio(fromRadioChar);
-        });
+        };
+        fromNumChar.addEventListener("characteristicvaluechanged", fromNumHandler);
         console.log("BLE: fromNum notifications active");
       } catch (e) {
         console.warn("BLE: fromNum startNotifications failed, relying on poll only:", e);
       }
 
-      // Fallback receive path: poll fromRadio every 3 seconds
-      // Catches messages when notifications are silent (firmware quirks)
+      // Fallback receive path: poll every 3 seconds
       const pollInterval = setInterval(() => {
         readAllFromRadio(fromRadioChar);
       }, 3000);
@@ -203,21 +233,25 @@ export function useBLE() {
         (window as any).queryClient?.invalidateQueries({ queryKey: ["/api/messages"] });
       });
 
-      const onDisconnect = () => {
-        console.log("BLE: Disconnected");
+      // Register disconnect handler
+      onDisconnectHandler = () => {
+        console.log("BLE: gattserverdisconnected event fired");
         clearInterval((window as any)._bleFromRadioPoll);
         isReading = false;
         setState({ isConnected: false, deviceName: null, isConnecting: false });
         toast({ title: "Disconnected", description: "Node link lost.", variant: "destructive" });
       };
-
-      device.addEventListener("gattserverdisconnected", onDisconnect);
-      (window as any)._onDisconnect = onDisconnect;
+      device.addEventListener("gattserverdisconnected", onDisconnectHandler);
 
       toast({ title: "Connected", description: `Bridged to ${device.name}.` });
     } catch (error: any) {
       console.error("BLE Error:", error?.name, error?.message);
       setState({ isConnected: false, deviceName: null, isConnecting: false });
+      // If a reconnect to a cached device fails, forget it so next click shows the picker
+      if (cachedDevice && error?.name !== "NotFoundError") {
+        console.warn("BLE: Cached device connect failed — clearing cache");
+        cachedDevice = null;
+      }
       if (error?.name !== "NotFoundError") {
         toast({
           title: "Connection Failed",
@@ -231,10 +265,9 @@ export function useBLE() {
   }, [toast]);
 
   const disconnect = useCallback(() => {
-    clearInterval((window as any)._bleFromRadioPoll);
-    isReading = false;
-    if ((window as any).meshtasticDevice) {
-      (window as any).meshtasticDevice.gatt.disconnect();
+    cleanupListeners();
+    if (cachedDevice?.gatt?.connected) {
+      cachedDevice.gatt.disconnect();
     }
     setState({ isConnected: false, deviceName: null, isConnecting: false });
     toast({ title: "Disconnected", description: "Manually disconnected." });
