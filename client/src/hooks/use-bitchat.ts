@@ -5,6 +5,8 @@ const BITCHAT_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
 const BITCHAT_TX     = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // notify → we receive
 const BITCHAT_RX     = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; // write  → we send
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 interface BitChatPeer {
   device: BluetoothDevice;
   rxChar: BluetoothRemoteGATTCharacteristic;
@@ -24,6 +26,31 @@ async function sendToPeers(bytes: Uint8Array): Promise<void> {
   }
 }
 
+// Retry getPrimaryService up to maxAttempts times with a delay between each.
+// Some GATT stacks (especially iOS) need a moment after connect() before they
+// are ready to enumerate services.
+async function getServiceWithRetry(
+  server: BluetoothRemoteGATTServer,
+  serviceUuid: string,
+  maxAttempts = 3,
+  delayMs = 600,
+): Promise<BluetoothRemoteGATTService> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (!server.connected) throw new DOMException("GATT server disconnected", "NetworkError");
+    try {
+      return await server.getPrimaryService(serviceUuid);
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`BitChat: getPrimaryService attempt ${attempt}/${maxAttempts} failed:`, err?.name, err?.message);
+      // NotFoundError = service definitively absent; no point retrying
+      if (err?.name === "NotFoundError") throw err;
+      if (attempt < maxAttempts) await sleep(delayMs);
+    }
+  }
+  throw lastError;
+}
+
 export function useBitChat() {
   const [peerCount, setPeerCount] = useState(0);
   const { toast } = useToast();
@@ -39,10 +66,9 @@ export function useBitChat() {
     }
 
     try {
-      // Show ALL nearby BLE devices so the picker isn't empty when BitChat
-      // is running in the background on iOS (which stops advertising the
-      // service UUID). optionalServices grants access to the NUS service
-      // after the user picks their device.
+      // Show ALL nearby BLE devices — avoids empty picker when BitChat isn't
+      // broadcasting its service UUID (common on iOS in background mode).
+      // optionalServices grants access to the NUS service after the user picks.
       const device = await (navigator as any).bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: [BITCHAT_SERVICE],
@@ -50,17 +76,29 @@ export function useBitChat() {
 
       const server = await device.gatt!.connect();
 
-      // Attempt to get the BitChat NUS service — fails if the app isn't open
+      // Brief pause: some GATT stacks need a moment after connect() before
+      // they can enumerate services reliably.
+      await sleep(300);
+
+      // Attempt to get the BitChat NUS service with retries for transient errors
       let service: BluetoothRemoteGATTService;
       try {
-        service = await server.getPrimaryService(BITCHAT_SERVICE);
-      } catch {
+        service = await getServiceWithRetry(server, BITCHAT_SERVICE);
+      } catch (err: any) {
         server.disconnect();
-        toast({
-          title: "BitChat Not Found on That Device",
-          description: "Make sure the BitChat app is open and in the foreground on that device, then try again.",
-          variant: "destructive",
-        });
+        if (err?.name === "NotFoundError") {
+          toast({
+            title: "BitChat Not Found on That Device",
+            description: "Make sure the BitChat app is open and in the foreground on that device, then try again.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "GATT Connection Error",
+            description: "Could not read services from that device. Try moving closer or reconnecting.",
+            variant: "destructive",
+          });
+        }
         return;
       }
 
