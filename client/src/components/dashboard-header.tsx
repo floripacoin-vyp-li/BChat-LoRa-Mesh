@@ -1,5 +1,6 @@
-import { Activity, Bluetooth, Power, Trash2 } from "lucide-react";
+import { Activity, Bluetooth, Power, Trash2, Usb } from "lucide-react";
 import { useBLE } from "@/hooks/use-ble";
+import { useSerial } from "@/hooks/use-serial";
 import { useClearMessages } from "@/hooks/use-messages";
 import {
   AlertDialog,
@@ -15,15 +16,20 @@ import {
 
 interface DashboardHeaderProps {
   ble: ReturnType<typeof useBLE>;
+  serial: ReturnType<typeof useSerial>;
 }
 
-export function DashboardHeader({ ble }: DashboardHeaderProps) {
+const serialSupported = typeof navigator !== "undefined" && "serial" in navigator;
+
+export function DashboardHeader({ ble, serial }: DashboardHeaderProps) {
   const { mutate: clearMessages, isPending: isClearing } = useClearMessages();
+  const anyConnected = ble.isConnected || serial.isConnected;
+  const anyConnecting = ble.isConnecting || serial.isConnecting;
 
   return (
     <header className="glass-panel border-b-0 rounded-t-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 relative overflow-hidden">
       <div className="absolute inset-0 scanlines pointer-events-none opacity-20" />
-      
+
       <div className="flex items-center gap-3 relative z-10">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-card to-background border border-white/10 flex items-center justify-center shadow-lg">
           <Activity className="text-primary animate-pulse" size={20} />
@@ -36,10 +42,10 @@ export function DashboardHeader({ ble }: DashboardHeaderProps) {
         </div>
       </div>
 
-      <div className="flex items-center gap-3 w-full sm:w-auto relative z-10">
+      <div className="flex items-center gap-3 w-full sm:w-auto relative z-10 flex-wrap">
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <button 
+            <button
               className="px-3 py-2 rounded-lg border border-destructive/20 text-destructive/80 hover:bg-destructive/10 hover:text-destructive flex items-center gap-2 text-xs font-mono transition-colors"
               title="Clear Local Log"
               data-testid="button-clear-log"
@@ -57,8 +63,8 @@ export function DashboardHeader({ ble }: DashboardHeaderProps) {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel className="bg-secondary text-secondary-foreground border-white/10 hover:bg-white/5">Cancel</AlertDialogCancel>
-              <AlertDialogAction 
-                onClick={() => clearMessages()} 
+              <AlertDialogAction
+                onClick={() => clearMessages()}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
                 {isClearing ? "Purging..." : "Purge Logs"}
@@ -67,27 +73,45 @@ export function DashboardHeader({ ble }: DashboardHeaderProps) {
           </AlertDialogContent>
         </AlertDialog>
 
-        <div className="h-6 w-px bg-white/10 mx-1 hidden sm:block"></div>
+        <div className="h-6 w-px bg-white/10 mx-1 hidden sm:block" />
 
-        {ble.isConnected ? (
+        {anyConnected ? (
+          /* Disconnect button — shows which transport is active */
           <button
-            onClick={ble.disconnect}
+            onClick={ble.isConnected ? ble.disconnect : serial.disconnect}
             className="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-secondary border border-white/10 hover:bg-destructive/20 hover:border-destructive/50 hover:text-destructive text-foreground flex items-center justify-center gap-2 text-sm font-medium transition-all group"
             data-testid="button-disconnect"
           >
             <Power size={16} className="group-hover:animate-pulse" />
             <span>Disconnect</span>
+            <span className="text-[10px] font-mono opacity-50 uppercase">
+              {ble.isConnected ? "BLE" : "USB"}
+            </span>
           </button>
         ) : (
-          <button
-            onClick={ble.connect}
-            disabled={ble.isConnecting}
-            className="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 flex items-center justify-center gap-2 text-sm font-semibold tech-glow-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            data-testid="button-connect-ble"
-          >
-            <Bluetooth size={16} className={ble.isConnecting ? "animate-pulse" : ""} />
-            <span>{ble.isConnecting ? "Pairing..." : "Connect BLE"}</span>
-          </button>
+          /* Both connect buttons when nothing is active */
+          <div className="flex gap-2 flex-1 sm:flex-none">
+            <button
+              onClick={ble.connect}
+              disabled={anyConnecting}
+              className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 flex items-center justify-center gap-2 text-sm font-semibold tech-glow-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid="button-connect-ble"
+            >
+              <Bluetooth size={15} className={ble.isConnecting ? "animate-pulse" : ""} />
+              <span>{ble.isConnecting ? "Pairing…" : "BLE"}</span>
+            </button>
+
+            <button
+              onClick={serial.connect}
+              disabled={anyConnecting || !serialSupported}
+              title={serialSupported ? "Connect via USB Serial" : "Requires Chrome 89+ on desktop or Chrome 126+ on Android"}
+              className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-secondary border border-white/10 hover:bg-primary/10 hover:border-primary/30 hover:text-primary text-foreground flex items-center justify-center gap-2 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              data-testid="button-connect-serial"
+            >
+              <Usb size={15} className={serial.isConnecting ? "animate-pulse" : ""} />
+              <span>{serial.isConnecting ? "Opening…" : "USB"}</span>
+            </button>
+          </div>
         )}
       </div>
     </header>

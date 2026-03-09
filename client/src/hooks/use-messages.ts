@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type MessageInput } from "@shared/routes";
-import { buildTextToRadio } from "./use-ble";
+import { buildTextToRadio } from "@/lib/meshtastic";
 import { z } from "zod";
 
 // Helper for safe parsing and logging
@@ -31,14 +31,14 @@ export function useSendMessage() {
     mutationFn: async (message: MessageInput) => {
       const validated = api.messages.create.input.parse(message);
       
-      // Transmit to Meshtastic hardware using proper protobuf encoding
-      if (validated.sender === "user" && (window as any).meshtasticToRadio) {
+      // Transmit via whichever transport is active (BLE or Serial)
+      if (validated.sender === "user" && (window as any).meshtasticSend) {
         try {
           const bytes = buildTextToRadio(validated.content);
-          await (window as any).meshtasticToRadio.writeValue(bytes);
-          console.log("BLE: Transmitted protobuf packet:", validated.content);
+          await (window as any).meshtasticSend(bytes);
+          console.log("Mesh: Transmitted via", (window as any)._meshtasticTransport, ":", validated.content);
         } catch (err) {
-          console.error("BLE: Transmission failed:", err);
+          console.error("Mesh: Transmission failed:", err);
         }
       }
 
