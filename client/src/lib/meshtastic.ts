@@ -49,7 +49,9 @@ export function processFromRadio(bytes: Uint8Array): void {
       const packet = fromRadio.payloadVariant.value;
       const payloadCase = packet.payloadVariant.case;
       const senderLabel = resolveNodeName(packet.from);
-      console.log(`Mesh: Packet from "${senderLabel}", type: ${payloadCase}`);
+      // Use the Meshtastic packet ID for deduplication across multiple operators
+      const loraPacketId = packet.id ? String(packet.id) : undefined;
+      console.log(`Mesh: Packet from "${senderLabel}", type: ${payloadCase}, packetId: ${loraPacketId}`);
 
       if (payloadCase === "decoded") {
         const decoded = packet.payloadVariant.value;
@@ -61,22 +63,29 @@ export function processFromRadio(bytes: Uint8Array): void {
             fetch("/api/messages", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ sender: "node", content: `[${senderLabel}] ${text}` }),
+              body: JSON.stringify({
+                sender: "node",
+                content: `[${senderLabel}] ${text}`,
+                transmitted: true,
+                loraPacketId,
+              }),
             }).then(() => {
               (window as any).queryClient?.invalidateQueries({ queryKey: ["/api/messages"] });
             });
           }
         } else if (decoded.portnum === BITCHAT_PORT) {
           // BLB: raw BitChat bytes arrived over LoRa — relay to connected BLE peers
-          const bytes = decoded.payload;
-          console.log(`BLB: LoRa → BitChat (${bytes.length}B from ${senderLabel})`);
-          (window as any).bitchatSend?.(bytes);
+          const blbBytes = decoded.payload;
+          console.log(`BLB: LoRa → BitChat (${blbBytes.length}B from ${senderLabel})`);
+          (window as any).bitchatSend?.(blbBytes);
           fetch("/api/messages", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               sender: "system",
-              content: `[BLB] LoRa → BitChat: ${bytes.length}B from ${senderLabel}`,
+              content: `[BLB] LoRa → BitChat: ${blbBytes.length}B from ${senderLabel}`,
+              transmitted: true,
+              loraPacketId,
             }),
           }).then(() => {
             (window as any).queryClient?.invalidateQueries({ queryKey: ["/api/messages"] });
@@ -139,7 +148,7 @@ export function postSystemMessage(content: string): void {
   fetch("/api/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sender: "system", content }),
+    body: JSON.stringify({ sender: "system", content, transmitted: true }),
   }).then(() => {
     window.dispatchEvent(new CustomEvent("ble-connected"));
     (window as any).queryClient?.invalidateQueries({ queryKey: ["/api/messages"] });

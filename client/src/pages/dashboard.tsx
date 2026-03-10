@@ -9,6 +9,7 @@ import { useBLE } from "@/hooks/use-ble";
 import { useSerial } from "@/hooks/use-serial";
 import { useAlias } from "@/hooks/use-alias";
 import { useRelay } from "@/hooks/use-relay";
+import { useMessageStream } from "@/hooks/use-message-stream";
 
 export default function Dashboard() {
   const { data: messages, isLoading, refetch } = useMessages();
@@ -19,6 +20,7 @@ export default function Dashboard() {
 
   const isConnected = ble.isConnected || serial.isConnected;
   useRelay(isConnected);
+  useMessageStream();
   const activeDeviceName = ble.isConnected ? ble.deviceName : serial.isConnected ? serial.deviceName : null;
   const activeTransport = ble.isConnected ? "ble" : serial.isConnected ? "serial" : null;
 

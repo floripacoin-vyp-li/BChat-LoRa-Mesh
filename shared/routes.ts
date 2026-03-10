@@ -51,6 +51,14 @@ export const api = {
         404: errorSchemas.internal,
       },
     },
+    stream: {
+      method: 'GET' as const,
+      path: '/api/messages/stream' as const,
+    },
+    claim: {
+      method: 'POST' as const,
+      path: '/api/messages/:id/claim' as const,
+    },
   },
 };
 

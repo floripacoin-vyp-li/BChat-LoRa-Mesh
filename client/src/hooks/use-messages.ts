@@ -21,6 +21,8 @@ export function useMessages() {
       const data = await res.json();
       return parseWithLogging(api.messages.list.responses[200], data, "messages.list");
     },
+    // SSE handles real-time updates; this is a safety net for any missed events
+    refetchInterval: 10000,
   });
 }
 
