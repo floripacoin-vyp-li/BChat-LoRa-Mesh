@@ -29,6 +29,18 @@ export function resolveNodeName(nodeNum: number): string {
   return (nodeNum >>> 0).toString(16).toUpperCase();
 }
 
+function dispatchLocalMessage(detail: {
+  id: number;
+  sender: string;
+  content: string;
+  timestamp: string;
+  transmitted: boolean;
+  claimedBy: null;
+  loraPacketId: string | undefined;
+}) {
+  window.dispatchEvent(new CustomEvent("local-message", { detail }));
+}
+
 export function processFromRadio(bytes: Uint8Array): void {
   try {
     const fromRadio = fromBinary(Mesh.FromRadioSchema, bytes);
@@ -49,7 +61,6 @@ export function processFromRadio(bytes: Uint8Array): void {
       const packet = fromRadio.payloadVariant.value;
       const payloadCase = packet.payloadVariant.case;
       const senderLabel = resolveNodeName(packet.from);
-      // Use the Meshtastic packet ID for deduplication across multiple operators
       const loraPacketId = packet.id ? String(packet.id) : undefined;
       console.log(`Mesh: Packet from "${senderLabel}", type: ${payloadCase}, packetId: ${loraPacketId}`);
 
@@ -60,33 +71,55 @@ export function processFromRadio(bytes: Uint8Array): void {
           const text = new TextDecoder().decode(decoded.payload);
           console.log("Mesh: Text message:", text);
           if (text.trim().length > 0) {
+            const content = `[${senderLabel}] ${text}`;
+
+            if (!navigator.onLine) {
+              console.log("Mesh: Offline — routing incoming packet to local cache");
+              dispatchLocalMessage({
+                id: Date.now(),
+                sender: "node",
+                content,
+                timestamp: new Date().toISOString(),
+                transmitted: true,
+                claimedBy: null,
+                loraPacketId,
+              });
+              return;
+            }
+
             fetch("/api/messages", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                sender: "node",
-                content: `[${senderLabel}] ${text}`,
-                transmitted: true,
-                loraPacketId,
-              }),
+              body: JSON.stringify({ sender: "node", content, transmitted: true, loraPacketId }),
             }).then(() => {
               (window as any).queryClient?.invalidateQueries({ queryKey: ["/api/messages"] });
             });
           }
         } else if (decoded.portnum === BITCHAT_PORT) {
-          // BLB: raw BitChat bytes arrived over LoRa — relay to connected BLE peers
           const blbBytes = decoded.payload;
           console.log(`BLB: LoRa → BitChat (${blbBytes.length}B from ${senderLabel})`);
           (window as any).bitchatSend?.(blbBytes);
+
+          const content = `[BLB] LoRa → BitChat: ${blbBytes.length}B from ${senderLabel}`;
+
+          if (!navigator.onLine) {
+            console.log("Mesh: Offline — routing BLB packet to local cache");
+            dispatchLocalMessage({
+              id: Date.now(),
+              sender: "system",
+              content,
+              timestamp: new Date().toISOString(),
+              transmitted: true,
+              claimedBy: null,
+              loraPacketId,
+            });
+            return;
+          }
+
           fetch("/api/messages", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              sender: "system",
-              content: `[BLB] LoRa → BitChat: ${blbBytes.length}B from ${senderLabel}`,
-              transmitted: true,
-              loraPacketId,
-            }),
+            body: JSON.stringify({ sender: "system", content, transmitted: true, loraPacketId }),
           }).then(() => {
             (window as any).queryClient?.invalidateQueries({ queryKey: ["/api/messages"] });
           });
@@ -145,6 +178,21 @@ export function buildBitchatToRadio(bytes: Uint8Array): Uint8Array {
 }
 
 export function postSystemMessage(content: string): void {
+  if (!navigator.onLine) {
+    console.log("Mesh: Offline — routing system message to local cache");
+    dispatchLocalMessage({
+      id: Date.now(),
+      sender: "system",
+      content,
+      timestamp: new Date().toISOString(),
+      transmitted: true,
+      claimedBy: null,
+      loraPacketId: undefined,
+    });
+    window.dispatchEvent(new CustomEvent("ble-connected"));
+    return;
+  }
+
   fetch("/api/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

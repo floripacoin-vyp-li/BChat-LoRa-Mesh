@@ -13,13 +13,12 @@ export function useMessageStream() {
       console.log("[SSE] Connected to message stream");
     };
 
-    // Default event: a new message was created
+    // Default event: a new message was created (online path)
     es.onmessage = (event) => {
       try {
         const msg: Message = JSON.parse(event.data);
         queryClient.setQueryData<Message[]>([api.messages.list.path], (prev) => {
           if (!prev) return [msg];
-          // Dedup guard — don't append if already present
           if (prev.some((m) => m.id === msg.id)) return prev;
           return [...prev, msg];
         });
@@ -35,12 +34,26 @@ export function useMessageStream() {
     });
 
     es.onerror = () => {
-      // EventSource auto-reconnects natively — no manual retry needed
       console.warn("[SSE] Stream error — browser will reconnect automatically");
     };
 
+    // Local-message event: offline path — incoming LoRa packets injected directly
+    const handleLocalMessage = (event: Event) => {
+      const msg = (event as CustomEvent).detail as Message;
+      if (!msg) return;
+      console.log("[Local] Injecting offline message into cache:", msg.content);
+      queryClient.setQueryData<Message[]>([api.messages.list.path], (prev) => {
+        if (!prev) return [msg];
+        if (prev.some((m) => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
+    };
+
+    window.addEventListener("local-message", handleLocalMessage);
+
     return () => {
       es.close();
+      window.removeEventListener("local-message", handleLocalMessage);
       console.log("[SSE] Stream closed");
     };
   }, [queryClient]);

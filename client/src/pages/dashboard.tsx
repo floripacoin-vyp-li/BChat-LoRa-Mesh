@@ -10,6 +10,7 @@ import { useSerial } from "@/hooks/use-serial";
 import { useAlias } from "@/hooks/use-alias";
 import { useRelay } from "@/hooks/use-relay";
 import { useMessageStream } from "@/hooks/use-message-stream";
+import { useConnectivity } from "@/hooks/use-connectivity";
 
 export default function Dashboard() {
   const { data: messages, isLoading, refetch } = useMessages();
@@ -19,6 +20,7 @@ export default function Dashboard() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const isConnected = ble.isConnected || serial.isConnected;
+  const isOnline = useConnectivity();
   useRelay(isConnected);
   useMessageStream();
   const activeDeviceName = ble.isConnected ? ble.deviceName : serial.isConnected ? serial.deviceName : null;
@@ -53,11 +55,24 @@ export default function Dashboard() {
         <div className="flex-1 glass-panel border-y-0 relative flex flex-col overflow-hidden bg-card/60">
           {/* Connection Status Banner */}
           <div className={`px-4 py-1.5 text-xs font-mono uppercase tracking-widest flex items-center justify-center gap-3 border-b ${
-            isConnected
+            !isOnline
+              ? "bg-yellow-400/10 text-yellow-400 border-yellow-400/20"
+              : isConnected
               ? "bg-primary/10 text-primary border-primary/20"
               : "bg-destructive/10 text-destructive border-destructive/20"
           }`}>
-            {isConnected ? (
+            {!isOnline ? (
+              <>
+                <WifiOff size={12} className="animate-pulse" />
+                <span>Offline · Local BLE Only</span>
+                {isConnected && activeDeviceName && (
+                  <span className="flex items-center gap-1 opacity-60">
+                    {activeTransport === "ble" ? <Bluetooth size={10} /> : <Usb size={10} />}
+                    {activeDeviceName}
+                  </span>
+                )}
+              </>
+            ) : isConnected ? (
               <>
                 <Signal size={12} className="animate-pulse" />
                 <span>Uplink Established: {activeDeviceName}</span>

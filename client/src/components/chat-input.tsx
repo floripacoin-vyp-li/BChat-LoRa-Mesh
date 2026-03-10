@@ -31,7 +31,7 @@ export function ChatInput({ isConnected, alias, onAliasChange }: ChatInputProps)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim() || !isConnected || isPending) return;
+    if (!content.trim() || isPending) return;
 
     sendMessage({ content: content.trim(), sender: alias }, {
       onSuccess: () => setContent("")
@@ -106,8 +106,8 @@ export function ChatInput({ isConnected, alias, onAliasChange }: ChatInputProps)
           type="text"
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          placeholder={isConnected ? "Transmit message..." : "Connect to Meshtastic to transmit"}
-          disabled={!isConnected || isPending || editingAlias}
+          placeholder="Transmit message..."
+          disabled={isPending || editingAlias}
           className="flex-1 bg-transparent border-none px-2 py-4 text-sm focus:outline-none focus:ring-0 disabled:opacity-50 text-foreground placeholder:text-muted-foreground/50 font-mono"
           data-testid="input-message"
         />
@@ -115,7 +115,7 @@ export function ChatInput({ isConnected, alias, onAliasChange }: ChatInputProps)
         <div className="pr-2">
           <button
             type="submit"
-            disabled={!content.trim() || !isConnected || isPending}
+            disabled={!content.trim() || isPending}
             className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground disabled:opacity-30 disabled:hover:bg-primary/10 disabled:hover:text-primary transition-all duration-200"
             data-testid="button-send"
           >

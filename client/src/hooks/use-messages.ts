@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type MessageInput } from "@shared/routes";
 import { buildTextToRadio } from "@/lib/meshtastic";
 import { z } from "zod";
+import type { Message } from "@shared/schema";
 
 function parseWithLogging<T>(schema: z.ZodSchema<T>, data: unknown, label: string): T {
   const result = schema.safeParse(data);
@@ -45,6 +46,26 @@ export function useSendMessage() {
         } catch (err) {
           console.error("Mesh: Transmission failed:", err);
         }
+      }
+
+      // When offline: skip server POST, inject into local cache, still transmitted via radio if available
+      if (!navigator.onLine) {
+        console.log("Mesh: Offline — storing outgoing message locally");
+        const localMsg: Message = {
+          id: Date.now(),
+          sender: validated.sender,
+          content: validated.content,
+          timestamp: new Date(),
+          transmitted,
+          claimedBy: null,
+          loraPacketId: null,
+        };
+        queryClient.setQueryData<Message[]>([api.messages.list.path], (prev) => {
+          if (!prev) return [localMsg];
+          if (prev.some((m) => m.id === localMsg.id)) return prev;
+          return [...prev, localMsg];
+        });
+        return localMsg;
       }
 
       const res = await fetch(api.messages.create.path, {
