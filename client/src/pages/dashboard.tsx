@@ -8,6 +8,7 @@ import { useMessages } from "@/hooks/use-messages";
 import { useBLE } from "@/hooks/use-ble";
 import { useSerial } from "@/hooks/use-serial";
 import { useAlias } from "@/hooks/use-alias";
+import { useRelay } from "@/hooks/use-relay";
 
 export default function Dashboard() {
   const { data: messages, isLoading, refetch } = useMessages();
@@ -17,6 +18,7 @@ export default function Dashboard() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const isConnected = ble.isConnected || serial.isConnected;
+  useRelay(isConnected);
   const activeDeviceName = ble.isConnected ? ble.deviceName : serial.isConnected ? serial.deviceName : null;
   const activeTransport = ble.isConnected ? "ble" : serial.isConnected ? "serial" : null;
 

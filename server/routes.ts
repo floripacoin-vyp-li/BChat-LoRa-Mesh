@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { api } from "@shared/routes";
+import { api, buildUrl } from "@shared/routes";
 import { z } from "zod";
 
 export async function registerRoutes(
@@ -42,17 +42,38 @@ export async function registerRoutes(
     }
   });
 
+  app.get(api.messages.pending.path, async (req, res) => {
+    try {
+      const afterId = parseInt(String(req.query.after ?? "0"), 10) || 0;
+      const pending = await storage.getPendingMessages(afterId);
+      res.json(pending);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to get pending messages" });
+    }
+  });
+
+  app.patch("/api/messages/:id/transmitted", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+      await storage.markTransmitted(id);
+      res.json({ id, transmitted: true });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to mark transmitted" });
+    }
+  });
+
   return httpServer;
 }
 
-// Seed the database with some example messages
 async function seedDatabase() {
   try {
     const existingMessages = await storage.getMessages();
     if (existingMessages.length === 0) {
       await storage.createMessage({
         sender: 'system',
-        content: 'Welcome to the Bit Chat Meshtastic Bridge. Use the "Connect" button to pair with a local Meshtastic node via Bluetooth Low Energy (BLE).'
+        content: 'Welcome to the Bit Chat Meshtastic Bridge. Use the "Connect" button to pair with a local Meshtastic node via Bluetooth Low Energy (BLE).',
+        transmitted: true,
       });
     }
   } catch (err) {
@@ -60,5 +81,4 @@ async function seedDatabase() {
   }
 }
 
-// Call seed inside a promise so it doesn't block startup
 seedDatabase().catch(console.error);

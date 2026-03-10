@@ -4,12 +4,14 @@ import {
   type InsertMessage,
   type Message
 } from "@shared/schema";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, gt, and, notInArray } from "drizzle-orm";
 
 export interface IStorage {
   getMessages(): Promise<Message[]>;
   createMessage(message: InsertMessage): Promise<Message>;
   clearMessages(): Promise<void>;
+  getPendingMessages(afterId: number): Promise<Message[]>;
+  markTransmitted(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -23,9 +25,30 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return message;
   }
-  
+
   async clearMessages(): Promise<void> {
     await db.delete(messages);
+  }
+
+  async getPendingMessages(afterId: number): Promise<Message[]> {
+    return await db
+      .select()
+      .from(messages)
+      .where(
+        and(
+          eq(messages.transmitted, false),
+          gt(messages.id, afterId),
+          notInArray(messages.sender, ["system", "node"])
+        )
+      )
+      .orderBy(asc(messages.id));
+  }
+
+  async markTransmitted(id: number): Promise<void> {
+    await db
+      .update(messages)
+      .set({ transmitted: true })
+      .where(eq(messages.id, id));
   }
 }
 

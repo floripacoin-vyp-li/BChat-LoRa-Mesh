@@ -35,7 +35,22 @@ export const api = {
       responses: {
         204: z.void(),
       },
-    }
+    },
+    pending: {
+      method: 'GET' as const,
+      path: '/api/messages/pending' as const,
+      responses: {
+        200: z.array(z.custom<typeof messages.$inferSelect>()),
+      },
+    },
+    markTransmitted: {
+      method: 'PATCH' as const,
+      path: '/api/messages/:id/transmitted' as const,
+      responses: {
+        200: z.custom<typeof messages.$inferSelect>(),
+        404: errorSchemas.internal,
+      },
+    },
   },
 };
 
