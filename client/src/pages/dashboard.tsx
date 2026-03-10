@@ -184,6 +184,7 @@ export default function Dashboard() {
             <ContactsPanel
               contacts={contacts}
               myPublicKeyBase64={myPublicKeyBase64}
+              myAlias={alias}
               unreadCounts={unreadCounts}
               onAddContact={addContact}
               onRemoveContact={removeContact}

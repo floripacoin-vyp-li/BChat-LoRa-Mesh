@@ -90,6 +90,12 @@
   }
 }
 
+@keyframes scan {
+  0% { top: 0; }
+  50% { top: calc(100% - 2px); }
+  100% { top: 0; }
+}
+
 /* CRT Scanline effect overlay */
 .scanlines::before {
   content: " ";
