@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type MessageInput } from "@shared/routes";
 import { buildTextToRadio } from "@/lib/meshtastic";
+import { encrypt, formatDmPayload } from "@/lib/crypto";
 import { z } from "zod";
 import type { Message } from "@shared/schema";
 
@@ -85,6 +86,74 @@ export function useSendMessage() {
 
       const data = await res.json();
       return parseWithLogging(api.messages.create.responses[201], data, "messages.create");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.messages.list.path] });
+    },
+  });
+}
+
+export interface SendDmInput {
+  contactAlias: string;
+  content: string;
+  myAlias: string;
+}
+
+export function useSendPrivateMessage(
+  getSharedKey: (alias: string) => Promise<CryptoKey | null>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ contactAlias, content, myAlias }: SendDmInput) => {
+      const sharedKey = await getSharedKey(contactAlias);
+      if (!sharedKey) throw new Error(`No shared key for contact "${contactAlias}"`);
+
+      const encrypted = await encrypt(sharedKey, content);
+      const dmContent = formatDmPayload(myAlias, encrypted);
+
+      // Transmit over radio if connected
+      let transmitted = false;
+      if ((window as any).meshtasticSend) {
+        try {
+          const { buildTextToRadio } = await import("@/lib/meshtastic");
+          const bytes = buildTextToRadio(dmContent);
+          await (window as any).meshtasticSend(bytes);
+          transmitted = true;
+        } catch (err) {
+          console.error("Mesh: DM transmission failed:", err);
+        }
+      }
+
+      // Offline: store locally
+      if (!navigator.onLine) {
+        const localMsg: Message = {
+          id: Date.now(),
+          sender: myAlias,
+          content: dmContent,
+          timestamp: new Date(),
+          transmitted,
+          claimedBy: null,
+          loraPacketId: null,
+        };
+        queryClient.setQueryData<Message[]>([api.messages.list.path], (prev) => {
+          if (!prev) return [localMsg];
+          if (prev.some((m) => m.id === localMsg.id)) return prev;
+          return [...prev, localMsg];
+        });
+        return localMsg;
+      }
+
+      const res = await fetch(api.messages.create.path, {
+        method: api.messages.create.method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sender: myAlias, content: dmContent, transmitted }),
+        credentials: "include",
+      });
+
+      if (!res.ok) throw new Error("Failed to send private message");
+
+      const data = await res.json();
+      return parseWithLogging(api.messages.create.responses[201], data, "messages.create.dm");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.messages.list.path] });

@@ -1,9 +1,11 @@
-import { useEffect, useRef } from "react";
-import { ShieldAlert, Signal, WifiOff, Bluetooth, Usb } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ShieldAlert, Signal, WifiOff, Bluetooth, Usb, Lock } from "lucide-react";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ChatInput } from "@/components/chat-input";
 import { ChatMessage } from "@/components/chat-message";
 import { AliasDialog } from "@/components/alias-dialog";
+import { ContactsPanel } from "@/components/contacts-panel";
+import { PrivateChat } from "@/components/private-chat";
 import { useMessages } from "@/hooks/use-messages";
 import { useBLE } from "@/hooks/use-ble";
 import { useSerial } from "@/hooks/use-serial";
@@ -11,6 +13,9 @@ import { useAlias } from "@/hooks/use-alias";
 import { useRelay } from "@/hooks/use-relay";
 import { useMessageStream } from "@/hooks/use-message-stream";
 import { useConnectivity } from "@/hooks/use-connectivity";
+import { useMyCryptoKey, useContacts } from "@/hooks/use-contacts";
+import { usePrivateMessages } from "@/hooks/use-private-messages";
+import { parseDmPayload } from "@/lib/crypto";
 
 export default function Dashboard() {
   const { data: messages, isLoading, refetch } = useMessages();
@@ -26,6 +31,14 @@ export default function Dashboard() {
   const activeDeviceName = ble.isConnected ? ble.deviceName : serial.isConnected ? serial.deviceName : null;
   const activeTransport = ble.isConnected ? "ble" : serial.isConnected ? "serial" : null;
 
+  // E2E crypto state
+  const { myPublicKeyBase64 } = useMyCryptoKey();
+  const { contacts, addContact, removeContact, getSharedKey } = useContacts();
+  const { getThread, addSentDm, markRead, unreadCounts, totalUnread } = usePrivateMessages(contacts, getSharedKey);
+
+  const [dmPanelOpen, setDmPanelOpen] = useState(false);
+  const [activeDmContact, setActiveDmContact] = useState<string | null>(null);
+
   useEffect(() => {
     const handleConnected = () => refetch();
     window.addEventListener("ble-connected", handleConnected);
@@ -37,6 +50,19 @@ export default function Dashboard() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  const handleOpenChat = (contactAlias: string) => {
+    setActiveDmContact(contactAlias);
+  };
+
+  const handleBackToContacts = () => {
+    setActiveDmContact(null);
+  };
+
+  const handleClosePanel = () => {
+    setDmPanelOpen(false);
+    setActiveDmContact(null);
+  };
 
   return (
     <div className="min-h-screen p-4 md:p-8 flex items-center justify-center relative">
@@ -94,6 +120,21 @@ export default function Dashboard() {
             )}
           </div>
 
+          {/* DM Button */}
+          <button
+            onClick={() => setDmPanelOpen(true)}
+            className="absolute top-10 right-3 z-10 flex items-center gap-1 bg-background/60 hover:bg-background/80 border border-white/10 rounded-lg px-2 py-1.5 transition-colors"
+            title="Secure private chats"
+            data-testid="button-open-dm-panel"
+          >
+            <Lock size={12} className="text-primary" />
+            {totalUnread > 0 && (
+              <span className="bg-primary text-primary-foreground text-[10px] font-mono px-1 rounded-full leading-none py-0.5" data-testid="badge-unread-dm">
+                {totalUnread}
+              </span>
+            )}
+          </button>
+
           {/* Messages Scroll Area */}
           <div
             ref={scrollRef}
@@ -120,12 +161,48 @@ export default function Dashboard() {
                     Session Started
                   </span>
                 </div>
-                {messages.map((msg) => (
-                  <ChatMessage key={msg.id} message={msg} myAlias={alias} />
-                ))}
+                {messages.map((msg) => {
+                  const isDm = parseDmPayload(msg.content) !== null;
+                  if (isDm) {
+                    return (
+                      <div key={msg.id} className="flex items-center gap-2 px-2 py-1" data-testid={`msg-encrypted-${msg.id}`}>
+                        <Lock size={11} className="text-muted-foreground/30 flex-shrink-0" />
+                        <span className="text-xs font-mono text-muted-foreground/30 italic">
+                          Private message
+                        </span>
+                      </div>
+                    );
+                  }
+                  return <ChatMessage key={msg.id} message={msg} myAlias={alias} />;
+                })}
               </div>
             )}
           </div>
+
+          {/* DM Overlays */}
+          {dmPanelOpen && !activeDmContact && (
+            <ContactsPanel
+              contacts={contacts}
+              myPublicKeyBase64={myPublicKeyBase64}
+              unreadCounts={unreadCounts}
+              onAddContact={addContact}
+              onRemoveContact={removeContact}
+              onOpenChat={handleOpenChat}
+              onClose={handleClosePanel}
+            />
+          )}
+
+          {dmPanelOpen && activeDmContact && (
+            <PrivateChat
+              contactAlias={activeDmContact}
+              myAlias={alias}
+              messages={getThread(activeDmContact)}
+              getSharedKey={getSharedKey}
+              onAddSentDm={addSentDm}
+              onMarkRead={markRead}
+              onBack={handleBackToContacts}
+            />
+          )}
         </div>
 
         <ChatInput isConnected={isConnected} alias={alias} onAliasChange={setAlias} />
