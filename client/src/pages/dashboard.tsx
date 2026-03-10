@@ -12,7 +12,7 @@ import { useSerial } from "@/hooks/use-serial";
 import { useAlias } from "@/hooks/use-alias";
 import { useRelay } from "@/hooks/use-relay";
 import { useMessageStream } from "@/hooks/use-message-stream";
-import { useConnectivity } from "@/hooks/use-connectivity";
+import { useConnectivity, serverReachable } from "@/hooks/use-connectivity";
 import { useMyCryptoKey, useContacts } from "@/hooks/use-contacts";
 import { usePrivateMessages } from "@/hooks/use-private-messages";
 import { parseDmPayload } from "@/lib/crypto";
@@ -40,7 +40,7 @@ export default function Dashboard() {
   const [activeDmContact, setActiveDmContact] = useState<string | null>(null);
 
   useEffect(() => {
-    const handleConnected = () => { if (navigator.onLine) refetch(); };
+    const handleConnected = () => { if (serverReachable) refetch(); };
     window.addEventListener("ble-connected", handleConnected);
     return () => window.removeEventListener("ble-connected", handleConnected);
   }, [refetch]);
@@ -91,11 +91,13 @@ export default function Dashboard() {
               <>
                 <WifiOff size={12} className="animate-pulse" />
                 <span>Offline · Local BLE Only</span>
-                {isConnected && activeDeviceName && (
+                {isConnected && activeDeviceName ? (
                   <span className="flex items-center gap-1 opacity-60">
                     {activeTransport === "ble" ? <Bluetooth size={10} /> : <Usb size={10} />}
                     {activeDeviceName}
                   </span>
+                ) : (
+                  <span className="opacity-50 normal-case">— connect BLE radio to send</span>
                 )}
               </>
             ) : isConnected ? (

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type MessageInput } from "@shared/routes";
 import { buildTextToRadio } from "@/lib/meshtastic";
 import { encrypt, formatDmPayload } from "@/lib/crypto";
+import { serverReachable } from "@/hooks/use-connectivity";
 import { z } from "zod";
 import type { Message } from "@shared/schema";
 
@@ -24,7 +25,7 @@ export function useMessages() {
       return parseWithLogging(api.messages.list.responses[200], data, "messages.list");
     },
     // SSE handles real-time updates; skip polling when server is unreachable
-    refetchInterval: () => navigator.onLine ? 10000 : false,
+    refetchInterval: () => serverReachable ? 10000 : false,
   });
 }
 
@@ -41,7 +42,10 @@ export function useSendMessage() {
       if (isUserMessage && (window as any).meshtasticSend) {
         try {
           const bytes = buildTextToRadio(validated.content);
-          await (window as any).meshtasticSend(bytes);
+          const writeTimeout = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("BLE write timed out after 5s")), 5000)
+          );
+          await Promise.race([(window as any).meshtasticSend(bytes), writeTimeout]);
           transmitted = true;
           console.log("Mesh: Transmitted via", (window as any)._meshtasticTransport, ":", validated.content);
         } catch (err) {
@@ -50,7 +54,7 @@ export function useSendMessage() {
       }
 
       // When offline: skip server POST, inject into local cache, still transmitted via radio if available
-      if (!navigator.onLine) {
+      if (!serverReachable) {
         if (!transmitted) {
           throw new Error(
             (window as any).meshtasticSend
@@ -95,7 +99,7 @@ export function useSendMessage() {
       return parseWithLogging(api.messages.create.responses[201], data, "messages.create");
     },
     onSuccess: () => {
-      if (navigator.onLine) {
+      if (serverReachable) {
         queryClient.invalidateQueries({ queryKey: [api.messages.list.path] });
       }
     },
@@ -126,7 +130,10 @@ export function useSendPrivateMessage(
         try {
           const { buildTextToRadio } = await import("@/lib/meshtastic");
           const bytes = buildTextToRadio(dmContent);
-          await (window as any).meshtasticSend(bytes);
+          const writeTimeout = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("BLE write timed out after 5s")), 5000)
+          );
+          await Promise.race([(window as any).meshtasticSend(bytes), writeTimeout]);
           transmitted = true;
         } catch (err) {
           console.error("Mesh: DM transmission failed:", err);
@@ -134,7 +141,7 @@ export function useSendPrivateMessage(
       }
 
       // Offline: store locally if transmitted via BLE, otherwise fail loudly
-      if (!navigator.onLine) {
+      if (!serverReachable) {
         if (!transmitted) {
           throw new Error(
             (window as any).meshtasticSend
@@ -172,7 +179,7 @@ export function useSendPrivateMessage(
       return parseWithLogging(api.messages.create.responses[201], data, "messages.create.dm");
     },
     onSuccess: () => {
-      if (navigator.onLine) {
+      if (serverReachable) {
         queryClient.invalidateQueries({ queryKey: [api.messages.list.path] });
       }
     },

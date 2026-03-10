@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 
+// Module-level flag — updated by the hook, readable anywhere without React context
+export let serverReachable = navigator.onLine;
+
 async function probeServer(): Promise<boolean> {
   if (!navigator.onLine) return false;
   try {
@@ -22,13 +25,14 @@ export function useConnectivity(): boolean {
 
   const check = useCallback(async () => {
     const reachable = await probeServer();
+    serverReachable = reachable;
     setIsOnline(reachable);
   }, []);
 
   useEffect(() => {
     check();
 
-    const handleOffline = () => setIsOnline(false);
+    const handleOffline = () => { serverReachable = false; setIsOnline(false); };
     const handleOnline = () => check();
 
     window.addEventListener("offline", handleOffline);
