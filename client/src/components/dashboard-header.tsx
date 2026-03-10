@@ -154,7 +154,7 @@ export function DashboardHeader({ ble, serial }: DashboardHeaderProps) {
             ) : (
               <div className="flex flex-col items-center gap-4 py-2">
                 <p className="text-xs text-muted-foreground text-center leading-relaxed">
-                  Create a mobile hotspot, connect other devices to it, then scan
+                  Share this link — other devices need internet access to open it
                 </p>
                 <QRCodeDisplay value={currentUrl} size={220} />
                 <p className="text-[10px] font-mono text-muted-foreground/60 break-all text-center px-2" data-testid="text-share-url">
@@ -168,6 +168,9 @@ export function DashboardHeader({ ble, serial }: DashboardHeaderProps) {
                   {copied === currentUrl ? <Check size={13} className="text-green-400" /> : <Clipboard size={13} />}
                   {copied === currentUrl ? "Copied!" : "Copy URL"}
                 </button>
+                <p className="text-[10px] font-mono text-muted-foreground/40 text-center leading-relaxed px-4">
+                  For offline LAN mode, run BCB on your own machine — the local IP QR will appear automatically
+                </p>
               </div>
             )}
           </DialogContent>

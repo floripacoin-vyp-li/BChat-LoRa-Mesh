@@ -192,7 +192,11 @@ export async function registerRoutes(
     for (const iface of Object.values(interfaces)) {
       if (!iface) continue;
       for (const addr of iface) {
-        if (addr.family === "IPv4" && !addr.internal) {
+        if (
+          addr.family === "IPv4" &&
+          !addr.internal &&
+          (addr.address.startsWith("192.168.") || addr.address.startsWith("10."))
+        ) {
           localIp = addr.address;
           break;
         }
