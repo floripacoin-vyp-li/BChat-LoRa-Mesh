@@ -25,6 +25,42 @@ export function useRelay(isConnected: boolean) {
   const lastSeenIdRef = useRef<number>(0);
   const initializedRef = useRef<boolean>(false);
 
+  // Operator heartbeat — tells the server this client has a live radio
+  useEffect(() => {
+    if (!isConnected) {
+      // Notify server immediately that this operator is gone
+      fetch("/api/operator/heartbeat", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operatorId: OPERATOR_ID }),
+        credentials: "include",
+      }).catch(() => {});
+      return;
+    }
+
+    const sendHeartbeat = () => {
+      fetch("/api/operator/heartbeat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operatorId: OPERATOR_ID }),
+        credentials: "include",
+      }).catch(() => {});
+    };
+
+    sendHeartbeat(); // immediate on connect
+    const heartbeat = setInterval(sendHeartbeat, 10_000);
+    return () => {
+      clearInterval(heartbeat);
+      // Best-effort offline notification on unmount
+      fetch("/api/operator/heartbeat", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operatorId: OPERATOR_ID }),
+        credentials: "include",
+      }).catch(() => {});
+    };
+  }, [isConnected]);
+
   useEffect(() => {
     if (!isConnected) {
       initializedRef.current = false;

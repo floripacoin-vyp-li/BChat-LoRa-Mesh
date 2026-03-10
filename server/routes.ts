@@ -8,19 +8,37 @@ import type { Message } from "@shared/schema";
 // In-memory SSE client registry — all connected browsers
 const sseClients = new Set<Response>();
 
-function broadcast(msg: Message): void {
-  const data = `data: ${JSON.stringify(msg)}\n\n`;
+// Operator presence — maps operatorId → last heartbeat timestamp (ms)
+const activeOperators = new Map<string, number>();
+const OPERATOR_TTL_MS = 20_000;
+
+function broadcastRaw(data: string): void {
   for (const client of sseClients) {
     try { client.write(data); } catch (_) { sseClients.delete(client); }
   }
 }
 
-function broadcastClear(): void {
-  const data = `event: clear\ndata: {}\n\n`;
-  for (const client of sseClients) {
-    try { client.write(data); } catch (_) { sseClients.delete(client); }
-  }
+function broadcast(msg: Message): void {
+  broadcastRaw(`data: ${JSON.stringify(msg)}\n\n`);
 }
+
+function broadcastClear(): void {
+  broadcastRaw(`event: clear\ndata: {}\n\n`);
+}
+
+function broadcastOperatorCount(): void {
+  broadcastRaw(`event: operator-status\ndata: ${JSON.stringify({ count: activeOperators.size })}\n\n`);
+}
+
+// Prune stale operators every 5 seconds and broadcast if count changed
+setInterval(() => {
+  const now = Date.now();
+  const before = activeOperators.size;
+  for (const [id, ts] of activeOperators) {
+    if (now - ts > OPERATOR_TTL_MS) activeOperators.delete(id);
+  }
+  if (activeOperators.size !== before) broadcastOperatorCount();
+}, 5_000);
 
 export async function registerRoutes(
   httpServer: Server,
@@ -135,6 +153,33 @@ export async function registerRoutes(
     } catch (err) {
       res.status(500).json({ message: "Failed to claim message" });
     }
+  });
+
+  // ── Operator heartbeat — tracks which clients have a live radio ───────────
+  app.post("/api/operator/heartbeat", (req, res) => {
+    const { operatorId } = req.body ?? {};
+    if (!operatorId || typeof operatorId !== "string") {
+      return res.status(400).json({ message: "operatorId required" });
+    }
+    const before = activeOperators.size;
+    activeOperators.set(operatorId, Date.now());
+    if (activeOperators.size !== before) broadcastOperatorCount();
+    res.json({ count: activeOperators.size });
+  });
+
+  app.delete("/api/operator/heartbeat", (req, res) => {
+    const { operatorId } = req.body ?? {};
+    if (!operatorId || typeof operatorId !== "string") {
+      return res.status(400).json({ message: "operatorId required" });
+    }
+    const before = activeOperators.size;
+    activeOperators.delete(operatorId);
+    if (activeOperators.size !== before) broadcastOperatorCount();
+    res.json({ count: activeOperators.size });
+  });
+
+  app.get("/api/operator/count", (_req, res) => {
+    res.json({ count: activeOperators.size });
   });
 
   return httpServer;

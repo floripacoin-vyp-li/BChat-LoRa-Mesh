@@ -98,6 +98,18 @@ A standalone hardware companion that lets ANY nearby BitChat phone connect autom
 ### Web App `/firmware` Page
 Provides: hardware table with purchase links, Arduino IDE setup steps, configuration guide, full firmware code with Copy + Download buttons, flashing instructions, usage guide.
 
+## Multi-User / Gateway Awareness
+
+- **Operator heartbeat**: When a BCB client connects a radio (BLE or USB), it sends `POST /api/operator/heartbeat` every 10s. Server tracks active operators with a 20s TTL and broadcasts `operator-status` SSE events when the count changes.
+- **Non-operator clients** receive `operator-status` events via `use-message-stream.ts` (relayed as `gateway-status` window events). The `use-gateway-presence.ts` hook exposes `gatewayOnline: boolean`.
+- **Dashboard banner states** (priority order):
+  1. `!isOnline && isConnected` → amber "Offline · Local BLE Only"
+  2. `!isOnline && !isConnected` → red "Offline · No Radio — BLE required"
+  3. `isOnline && isConnected` → green "Uplink Established: device"
+  4. `isOnline && !isConnected && gatewayOnline` → green "Gateway Active — LoRa uplink via remote operator"
+  5. `isOnline && !isConnected && !gatewayOnline` → red "Uplink Severed"
+- **ChatInput** disables input + send button with hint when `!isOnline && !isConnected`
+
 ## Important Notes
 - Web Bluetooth and Web Serial only work in Chrome/Edge (not in iframes — use a standalone tab)
 - Web Bluetooth cannot advertise as a peripheral — the app connects TO BitChat devices, not the other way around

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ShieldAlert, Signal, WifiOff, Bluetooth, Usb, Lock } from "lucide-react";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ChatInput } from "@/components/chat-input";
@@ -13,6 +13,7 @@ import { useAlias } from "@/hooks/use-alias";
 import { useRelay } from "@/hooks/use-relay";
 import { useMessageStream } from "@/hooks/use-message-stream";
 import { useConnectivity, serverReachable } from "@/hooks/use-connectivity";
+import { useGatewayPresence } from "@/hooks/use-gateway-presence";
 import { useMyCryptoKey, useContacts } from "@/hooks/use-contacts";
 import { usePrivateMessages } from "@/hooks/use-private-messages";
 import { parseDmPayload } from "@/lib/crypto";
@@ -26,6 +27,7 @@ export default function Dashboard() {
 
   const isConnected = ble.isConnected || serial.isConnected;
   const isOnline = useConnectivity();
+  const { gatewayOnline } = useGatewayPresence();
   useRelay(isConnected);
   useMessageStream();
   const activeDeviceName = ble.isConnected ? ble.deviceName : serial.isConnected ? serial.deviceName : null;
@@ -80,47 +82,78 @@ export default function Dashboard() {
 
         <div className="flex-1 glass-panel border-y-0 relative flex flex-col overflow-hidden bg-card/60">
           {/* Connection Status Banner */}
-          <div className={`px-4 py-1.5 text-xs font-mono uppercase tracking-widest flex items-center justify-center gap-3 border-b ${
-            !isOnline
-              ? "bg-yellow-400/10 text-yellow-400 border-yellow-400/20"
-              : isConnected
-              ? "bg-primary/10 text-primary border-primary/20"
-              : "bg-destructive/10 text-destructive border-destructive/20"
-          }`}>
-            {!isOnline ? (
-              <>
-                <WifiOff size={12} className="animate-pulse" />
-                <span>Offline · Local BLE Only</span>
-                {isConnected && activeDeviceName ? (
-                  <span className="flex items-center gap-1 opacity-60">
-                    {activeTransport === "ble" ? <Bluetooth size={10} /> : <Usb size={10} />}
-                    {activeDeviceName}
-                  </span>
-                ) : (
-                  <span className="opacity-50 normal-case">— connect BLE radio to send</span>
-                )}
-              </>
-            ) : isConnected ? (
-              <>
-                <Signal size={12} className="animate-pulse" />
-                <span>Uplink Established: {activeDeviceName}</span>
-                {activeTransport === "ble" ? (
-                  <span className="flex items-center gap-1 opacity-50">
-                    <Bluetooth size={10} /> BLE
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1 opacity-50">
-                    <Usb size={10} /> USB
-                  </span>
-                )}
-              </>
-            ) : (
-              <>
-                <WifiOff size={12} />
-                <span>Uplink Severed — Connect via BLE or USB Serial</span>
-              </>
-            )}
-          </div>
+          {(() => {
+            let colorClass = "";
+            let content = null as React.ReactNode;
+
+            if (!isOnline && isConnected) {
+              // Offline but has local radio — can still transmit via BLE
+              colorClass = "bg-yellow-400/10 text-yellow-400 border-yellow-400/20";
+              content = (
+                <>
+                  <WifiOff size={12} className="animate-pulse" />
+                  <span>Offline · Local BLE Only</span>
+                  {activeDeviceName && (
+                    <span className="flex items-center gap-1 opacity-60">
+                      {activeTransport === "ble" ? <Bluetooth size={10} /> : <Usb size={10} />}
+                      {activeDeviceName}
+                    </span>
+                  )}
+                </>
+              );
+            } else if (!isOnline && !isConnected) {
+              // Offline with no radio — can't transmit at all
+              colorClass = "bg-destructive/10 text-destructive border-destructive/20";
+              content = (
+                <>
+                  <WifiOff size={12} />
+                  <span>Offline · No Radio — BLE required to transmit</span>
+                </>
+              );
+            } else if (isOnline && isConnected) {
+              // Online with local radio — full operator mode
+              colorClass = "bg-primary/10 text-primary border-primary/20";
+              content = (
+                <>
+                  <Signal size={12} className="animate-pulse" />
+                  <span>Uplink Established: {activeDeviceName}</span>
+                  {activeTransport === "ble" ? (
+                    <span className="flex items-center gap-1 opacity-50">
+                      <Bluetooth size={10} /> BLE
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 opacity-50">
+                      <Usb size={10} /> USB
+                    </span>
+                  )}
+                </>
+              );
+            } else if (isOnline && !isConnected && gatewayOnline) {
+              // Online, no local radio, but a remote gateway is active
+              colorClass = "bg-primary/10 text-primary border-primary/20";
+              content = (
+                <>
+                  <Signal size={12} className="animate-pulse" />
+                  <span>Gateway Active — LoRa uplink via remote operator</span>
+                </>
+              );
+            } else {
+              // Online, no local radio, no known gateway
+              colorClass = "bg-destructive/10 text-destructive border-destructive/20";
+              content = (
+                <>
+                  <WifiOff size={12} />
+                  <span>Uplink Severed — Connect via BLE or USB Serial</span>
+                </>
+              );
+            }
+
+            return (
+              <div className={`px-4 py-1.5 text-xs font-mono uppercase tracking-widest flex items-center justify-center gap-3 border-b ${colorClass}`}>
+                {content}
+              </div>
+            );
+          })()}
 
           {/* DM Button */}
           <button
@@ -208,7 +241,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        <ChatInput isConnected={isConnected} alias={alias} onAliasChange={setAlias} />
+        <ChatInput isConnected={isConnected} isOnline={isOnline} alias={alias} onAliasChange={setAlias} />
       </div>
     </div>
   );

@@ -33,6 +33,14 @@ export function useMessageStream() {
       console.log("[SSE] Log cleared by server broadcast");
     });
 
+    // Operator presence event — a gateway came online or went offline
+    es.addEventListener("operator-status", (event) => {
+      try {
+        const { count } = JSON.parse(event.data);
+        window.dispatchEvent(new CustomEvent("gateway-status", { detail: { count } }));
+      } catch (_) {}
+    });
+
     es.onerror = () => {
       console.warn("[SSE] Stream error — browser will reconnect automatically");
     };
