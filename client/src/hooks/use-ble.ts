@@ -117,18 +117,27 @@ export function useBLE() {
       (window as any).meshtasticDevice = device;
       (window as any)._meshtasticTransport = "ble";
       (window as any).meshtasticSend = async (bytes: Uint8Array) => toRadioChar.writeValue(bytes);
+      window.dispatchEvent(new CustomEvent("meshtastic-ready", { detail: true }));
 
+      // Mark connected immediately — handshake failures below are non-fatal
       setState({
         isConnected: true,
         deviceName: device.name || "Meshtastic Node",
         isConnecting: false,
       });
 
-      console.log("BLE: Sending wantConfigId handshake...");
-      await toRadioChar.writeValue(buildWantConfig());
+      toast({ title: "BLE Connected", description: `Bridged to ${device.name || "Meshtastic Node"}.` });
 
-      console.log("BLE: Initial fromRadio drain...");
-      await readAllFromRadio(fromRadioChar);
+      // ── Phase 2: Handshake & notification setup (non-fatal) ─────────────────
+      try {
+        console.log("BLE: Sending wantConfigId handshake...");
+        await toRadioChar.writeValue(buildWantConfig());
+
+        console.log("BLE: Initial fromRadio drain...");
+        await readAllFromRadio(fromRadioChar);
+      } catch (e) {
+        console.warn("BLE: Initial handshake failed — radio still usable for TX:", e);
+      }
 
       try {
         await fromNumChar.startNotifications();
@@ -154,15 +163,19 @@ export function useBLE() {
         if ((window as any)._meshtasticTransport === "ble") {
           (window as any).meshtasticSend = undefined;
           (window as any)._meshtasticTransport = null;
+          window.dispatchEvent(new CustomEvent("meshtastic-ready", { detail: false }));
         }
         setState({ isConnected: false, deviceName: null, isConnecting: false });
         toast({ title: "Disconnected", description: "Node link lost.", variant: "destructive" });
       };
       device.addEventListener("gattserverdisconnected", onDisconnectHandler);
 
-      toast({ title: "BLE Connected", description: `Bridged to ${device.name}.` });
     } catch (error: any) {
+      // ── Phase 1 failure: GATT-level — truly unrecoverable ───────────────────
       console.error("BLE Error:", error?.name, error?.message);
+      (window as any).meshtasticSend = undefined;
+      (window as any)._meshtasticTransport = null;
+      window.dispatchEvent(new CustomEvent("meshtastic-ready", { detail: false }));
       setState({ isConnected: false, deviceName: null, isConnecting: false });
       if (cachedDevice && error?.name !== "NotFoundError") {
         console.warn("BLE: Cached device failed — clearing cache");

@@ -14,6 +14,7 @@ import { useRelay } from "@/hooks/use-relay";
 import { useMessageStream } from "@/hooks/use-message-stream";
 import { useConnectivity, serverReachable } from "@/hooks/use-connectivity";
 import { useGatewayPresence } from "@/hooks/use-gateway-presence";
+import { useMeshtasticReady } from "@/hooks/use-meshtastic-ready";
 import { useMyCryptoKey, useContacts } from "@/hooks/use-contacts";
 import { usePrivateMessages } from "@/hooks/use-private-messages";
 import { parseDmPayload } from "@/lib/crypto";
@@ -28,6 +29,7 @@ export default function Dashboard() {
   const isConnected = ble.isConnected || serial.isConnected;
   const isOnline = useConnectivity();
   const { gatewayOnline } = useGatewayPresence();
+  const isMeshtasticReady = useMeshtasticReady();
   useRelay(isConnected);
   useMessageStream();
   const activeDeviceName = ble.isConnected ? ble.deviceName : serial.isConnected ? serial.deviceName : null;
@@ -241,7 +243,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        <ChatInput isConnected={isConnected} isOnline={isOnline} alias={alias} onAliasChange={setAlias} />
+        <ChatInput isConnected={isConnected} isOnline={isOnline} isMeshtasticReady={isMeshtasticReady} alias={alias} onAliasChange={setAlias} />
       </div>
     </div>
   );

@@ -145,6 +145,7 @@ export function useSerial() {
 
       (window as any)._meshtasticTransport = "serial";
       (window as any).meshtasticSend = serialSend;
+      window.dispatchEvent(new CustomEvent("meshtastic-ready", { detail: true }));
 
       // Determine a display name from port info if available
       let portLabel = "USB Serial";
@@ -163,6 +164,7 @@ export function useSerial() {
         if ((window as any)._meshtasticTransport === "serial") {
           (window as any).meshtasticSend = undefined;
           (window as any)._meshtasticTransport = null;
+          window.dispatchEvent(new CustomEvent("meshtastic-ready", { detail: false }));
         }
         setState({ isConnected: false, deviceName: null, isConnecting: false });
         toast({ title: "Serial Disconnected", description: "USB link lost.", variant: "destructive" });
@@ -216,6 +218,7 @@ export function useSerial() {
     if ((window as any)._meshtasticTransport === "serial") {
       (window as any).meshtasticSend = undefined;
       (window as any)._meshtasticTransport = null;
+      window.dispatchEvent(new CustomEvent("meshtastic-ready", { detail: false }));
     }
 
     setState({ isConnected: false, deviceName: null, isConnecting: false });
