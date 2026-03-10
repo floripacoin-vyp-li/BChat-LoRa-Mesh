@@ -35,15 +35,26 @@ export function DashboardHeader({ ble, serial }: DashboardHeaderProps) {
   const anyConnected = ble.isConnected || serial.isConnected;
   const anyConnecting = ble.isConnecting || serial.isConnecting;
   const [qrOpen, setQrOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [localUrl, setLocalUrl] = useState<string | null>(null);
   const currentUrl = typeof window !== "undefined" ? window.location.href : "";
 
-  const handleCopyUrl = () => {
-    navigator.clipboard.writeText(currentUrl).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  const handleOpenQr = () => {
+    setQrOpen(true);
+    fetch("/api/network-info")
+      .then((r) => r.json())
+      .then((data) => setLocalUrl(data.localUrl ?? null))
+      .catch(() => {});
+  };
+
+  const handleCopyUrl = (url: string) => {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(url);
+      setTimeout(() => setCopied(null), 2000);
     });
   };
+
+  const showLocalQr = localUrl && localUrl !== currentUrl;
 
   return (
     <header className="glass-panel border-b-0 rounded-t-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 relative overflow-hidden">
@@ -79,7 +90,7 @@ export function DashboardHeader({ ble, serial }: DashboardHeaderProps) {
         </Link>
 
         <button
-          onClick={() => setQrOpen(true)}
+          onClick={handleOpenQr}
           className="px-3 py-2 rounded-lg border border-white/10 text-muted-foreground hover:bg-primary/10 hover:border-primary/30 hover:text-primary flex items-center gap-1.5 text-xs font-mono transition-colors"
           title="Share this URL via QR code"
           data-testid="button-scan-to-join"
@@ -89,29 +100,76 @@ export function DashboardHeader({ ble, serial }: DashboardHeaderProps) {
         </button>
 
         <Dialog open={qrOpen} onOpenChange={setQrOpen}>
-          <DialogContent className="bg-card border-border/50 font-mono max-w-sm">
+          <DialogContent className="bg-card border-border/50 font-mono max-w-sm overflow-y-auto max-h-[90vh]">
             <DialogHeader>
               <DialogTitle className="text-sm font-mono uppercase tracking-widest text-primary">
                 Scan to Join
               </DialogTitle>
             </DialogHeader>
-            <div className="flex flex-col items-center gap-4 py-2">
-              <p className="text-xs text-muted-foreground text-center leading-relaxed">
-                Create a mobile hotspot, connect other devices to it, then scan
-              </p>
-              <QRCodeDisplay value={currentUrl} size={220} />
-              <p className="text-[10px] font-mono text-muted-foreground/60 break-all text-center px-2" data-testid="text-share-url">
-                {currentUrl}
-              </p>
-              <button
-                onClick={handleCopyUrl}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-white/10 hover:bg-primary/10 hover:border-primary/30 hover:text-primary text-xs font-mono transition-colors"
-                data-testid="button-copy-url"
-              >
-                {copied ? <Check size={13} className="text-green-400" /> : <Clipboard size={13} />}
-                {copied ? "Copied!" : "Copy URL"}
-              </button>
-            </div>
+
+            {showLocalQr ? (
+              <div className="flex flex-col items-center gap-5 py-2">
+                {/* Local network QR — primary */}
+                <div className="flex flex-col items-center gap-3 w-full">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full">
+                      Local Network
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center leading-relaxed">
+                    Devices on your hotspot use this URL — works offline
+                  </p>
+                  <QRCodeDisplay value={localUrl!} size={200} />
+                  <p className="text-[10px] font-mono text-muted-foreground/60 break-all text-center px-2" data-testid="text-local-url">
+                    {localUrl}
+                  </p>
+                  <button
+                    onClick={() => handleCopyUrl(localUrl!)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-white/10 hover:bg-primary/10 hover:border-primary/30 hover:text-primary text-xs font-mono transition-colors"
+                    data-testid="button-copy-local-url"
+                  >
+                    {copied === localUrl ? <Check size={13} className="text-green-400" /> : <Clipboard size={13} />}
+                    {copied === localUrl ? "Copied!" : "Copy Local URL"}
+                  </button>
+                </div>
+
+                <div className="w-full border-t border-white/10 pt-4 flex flex-col items-center gap-3">
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/50">
+                    Internet URL
+                  </span>
+                  <QRCodeDisplay value={currentUrl} size={140} />
+                  <p className="text-[10px] font-mono text-muted-foreground/40 break-all text-center px-2" data-testid="text-share-url">
+                    {currentUrl}
+                  </p>
+                  <button
+                    onClick={() => handleCopyUrl(currentUrl)}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary border border-white/10 hover:bg-primary/10 hover:border-primary/30 hover:text-primary text-xs font-mono transition-colors"
+                    data-testid="button-copy-url"
+                  >
+                    {copied === currentUrl ? <Check size={11} className="text-green-400" /> : <Clipboard size={11} />}
+                    {copied === currentUrl ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-4 py-2">
+                <p className="text-xs text-muted-foreground text-center leading-relaxed">
+                  Create a mobile hotspot, connect other devices to it, then scan
+                </p>
+                <QRCodeDisplay value={currentUrl} size={220} />
+                <p className="text-[10px] font-mono text-muted-foreground/60 break-all text-center px-2" data-testid="text-share-url">
+                  {currentUrl}
+                </p>
+                <button
+                  onClick={() => handleCopyUrl(currentUrl)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-white/10 hover:bg-primary/10 hover:border-primary/30 hover:text-primary text-xs font-mono transition-colors"
+                  data-testid="button-copy-url"
+                >
+                  {copied === currentUrl ? <Check size={13} className="text-green-400" /> : <Clipboard size={13} />}
+                  {copied === currentUrl ? "Copied!" : "Copy URL"}
+                </button>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
 

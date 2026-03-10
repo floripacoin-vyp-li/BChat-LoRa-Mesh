@@ -9,8 +9,8 @@ initBridge();
 
 createRoot(document.getElementById("root")!).render(<App />);
 
-// Register service worker for PWA support (production only)
-if ("serviceWorker" in navigator && import.meta.env.PROD) {
+// Register service worker for PWA offline caching (all environments)
+if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
       .register("/sw.js")

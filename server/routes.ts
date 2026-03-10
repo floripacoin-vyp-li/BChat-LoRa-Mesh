@@ -1,5 +1,6 @@
 import type { Express, Response } from "express";
 import type { Server } from "http";
+import os from "os";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
@@ -180,6 +181,27 @@ export async function registerRoutes(
 
   app.get("/api/operator/count", (_req, res) => {
     res.json({ count: activeOperators.size });
+  });
+
+  // ── Local network info — used by QR "Scan to Join" to build hotspot URL ───
+  app.get("/api/network-info", (req, res) => {
+    const port = process.env.PORT ? parseInt(process.env.PORT) : 5000;
+    const interfaces = os.networkInterfaces();
+    let localIp: string | null = null;
+
+    for (const iface of Object.values(interfaces)) {
+      if (!iface) continue;
+      for (const addr of iface) {
+        if (addr.family === "IPv4" && !addr.internal) {
+          localIp = addr.address;
+          break;
+        }
+      }
+      if (localIp) break;
+    }
+
+    const localUrl = localIp ? `http://${localIp}:${port}` : null;
+    res.json({ localUrl, port });
   });
 
   return httpServer;
