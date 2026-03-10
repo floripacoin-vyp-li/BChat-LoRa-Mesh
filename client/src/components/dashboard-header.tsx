@@ -1,8 +1,10 @@
-import { Activity, Bluetooth, Cpu, Power, Trash2, Usb } from "lucide-react";
+import { Activity, Bluetooth, Check, Clipboard, Cpu, Power, QrCode, Trash2, Usb } from "lucide-react";
+import { useState } from "react";
 import { Link } from "wouter";
 import { useBLE } from "@/hooks/use-ble";
 import { useSerial } from "@/hooks/use-serial";
 import { useClearMessages } from "@/hooks/use-messages";
+import { QRCodeDisplay } from "@/components/qr-code";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,6 +16,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface DashboardHeaderProps {
   ble: ReturnType<typeof useBLE>;
@@ -26,6 +34,16 @@ export function DashboardHeader({ ble, serial }: DashboardHeaderProps) {
   const { mutate: clearMessages, isPending: isClearing } = useClearMessages();
   const anyConnected = ble.isConnected || serial.isConnected;
   const anyConnecting = ble.isConnecting || serial.isConnecting;
+  const [qrOpen, setQrOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const currentUrl = typeof window !== "undefined" ? window.location.href : "";
+
+  const handleCopyUrl = () => {
+    navigator.clipboard.writeText(currentUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   return (
     <header className="glass-panel border-b-0 rounded-t-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 relative overflow-hidden">
@@ -59,6 +77,43 @@ export function DashboardHeader({ ble, serial }: DashboardHeaderProps) {
             <span className="hidden sm:inline">Firmware</span>
           </button>
         </Link>
+
+        <button
+          onClick={() => setQrOpen(true)}
+          className="px-3 py-2 rounded-lg border border-white/10 text-muted-foreground hover:bg-primary/10 hover:border-primary/30 hover:text-primary flex items-center gap-1.5 text-xs font-mono transition-colors"
+          title="Share this URL via QR code"
+          data-testid="button-scan-to-join"
+        >
+          <QrCode size={12} />
+          <span className="hidden sm:inline">Join</span>
+        </button>
+
+        <Dialog open={qrOpen} onOpenChange={setQrOpen}>
+          <DialogContent className="bg-card border-border/50 font-mono max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="text-sm font-mono uppercase tracking-widest text-primary">
+                Scan to Join
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col items-center gap-4 py-2">
+              <p className="text-xs text-muted-foreground text-center leading-relaxed">
+                Create a mobile hotspot, connect other devices to it, then scan
+              </p>
+              <QRCodeDisplay value={currentUrl} size={220} />
+              <p className="text-[10px] font-mono text-muted-foreground/60 break-all text-center px-2" data-testid="text-share-url">
+                {currentUrl}
+              </p>
+              <button
+                onClick={handleCopyUrl}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-white/10 hover:bg-primary/10 hover:border-primary/30 hover:text-primary text-xs font-mono transition-colors"
+                data-testid="button-copy-url"
+              >
+                {copied ? <Check size={13} className="text-green-400" /> : <Clipboard size={13} />}
+                {copied ? "Copied!" : "Copy URL"}
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <AlertDialog>
           <AlertDialogTrigger asChild>
