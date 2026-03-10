@@ -116,8 +116,8 @@ export function ChatInput({ isConnected, isOnline, alias, onAliasChange }: ChatI
           type="text"
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          placeholder={!isOnline && !isConnected ? "Connect BLE radio to transmit..." : "Transmit message..."}
-          disabled={isPending || editingAlias || (!isOnline && !isConnected)}
+          placeholder={!isConnected && !isOnline ? "Connect BLE radio to transmit..." : "Transmit message..."}
+          disabled={isPending || editingAlias || (!isConnected && !isOnline)}
           className="flex-1 bg-transparent border-none px-2 py-4 text-sm focus:outline-none focus:ring-0 disabled:opacity-50 text-foreground placeholder:text-muted-foreground/50 font-mono"
           data-testid="input-message"
         />
@@ -125,8 +125,8 @@ export function ChatInput({ isConnected, isOnline, alias, onAliasChange }: ChatI
         <div className="pr-2">
           <button
             type="submit"
-            disabled={!content.trim() || isPending || (!isOnline && !isConnected)}
-            title={!isOnline && !isConnected ? "Connect a BLE radio to transmit offline" : undefined}
+            disabled={!content.trim() || isPending || (!isConnected && !isOnline)}
+            title={!isConnected && !isOnline ? "Connect a BLE radio to transmit offline" : undefined}
             className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground disabled:opacity-30 disabled:hover:bg-primary/10 disabled:hover:text-primary transition-all duration-200"
             data-testid="button-send"
           >

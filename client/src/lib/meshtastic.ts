@@ -177,19 +177,23 @@ export function buildBitchatToRadio(bytes: Uint8Array): Uint8Array {
   return toBinary(Mesh.ToRadioSchema, toRadio);
 }
 
+function dispatchSystemLocal(content: string): void {
+  console.log("Mesh: Server unreachable — routing system message to local cache");
+  dispatchLocalMessage({
+    id: Date.now(),
+    sender: "system",
+    content,
+    timestamp: new Date().toISOString(),
+    transmitted: true,
+    claimedBy: null,
+    loraPacketId: undefined,
+  });
+  window.dispatchEvent(new CustomEvent("ble-connected"));
+}
+
 export function postSystemMessage(content: string): void {
   if (!navigator.onLine) {
-    console.log("Mesh: Offline — routing system message to local cache");
-    dispatchLocalMessage({
-      id: Date.now(),
-      sender: "system",
-      content,
-      timestamp: new Date().toISOString(),
-      transmitted: true,
-      claimedBy: null,
-      loraPacketId: undefined,
-    });
-    window.dispatchEvent(new CustomEvent("ble-connected"));
+    dispatchSystemLocal(content);
     return;
   }
 
@@ -197,8 +201,12 @@ export function postSystemMessage(content: string): void {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sender: "system", content, transmitted: true }),
-  }).then(() => {
+  }).then((res) => {
+    if (!res.ok) throw new Error("server error");
     window.dispatchEvent(new CustomEvent("ble-connected"));
     (window as any).queryClient?.invalidateQueries({ queryKey: ["/api/messages"] });
+  }).catch(() => {
+    // Server unreachable (BLE-only with no internet) — show locally
+    dispatchSystemLocal(content);
   });
 }

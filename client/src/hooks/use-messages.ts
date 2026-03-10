@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type MessageInput } from "@shared/routes";
 import { buildTextToRadio } from "@/lib/meshtastic";
 import { encrypt, formatDmPayload } from "@/lib/crypto";
-import { serverReachable } from "@/hooks/use-connectivity";
+import { serverReachable, recheckConnectivity } from "@/hooks/use-connectivity";
 import { z } from "zod";
 import type { Message } from "@shared/schema";
 
@@ -80,23 +80,51 @@ export function useSendMessage() {
         return localMsg;
       }
 
-      const res = await fetch(api.messages.create.path, {
-        method: api.messages.create.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...validated, transmitted }),
-        credentials: "include",
-      });
+      try {
+        const res = await fetch(api.messages.create.path, {
+          method: api.messages.create.method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...validated, transmitted }),
+          credentials: "include",
+        });
 
-      if (!res.ok) {
-        if (res.status === 400) {
-          const error = await res.json();
-          throw new Error(error.message || "Validation failed");
+        if (!res.ok) {
+          if (res.status === 400) {
+            const error = await res.json();
+            throw new Error(error.message || "Validation failed");
+          }
+          throw new Error("Failed to send message");
         }
-        throw new Error("Failed to send message");
-      }
 
-      const data = await res.json();
-      return parseWithLogging(api.messages.create.responses[201], data, "messages.create");
+        const data = await res.json();
+        return parseWithLogging(api.messages.create.responses[201], data, "messages.create");
+      } catch (fetchErr) {
+        // Server unreachable — kick off a connectivity recheck so the UI updates fast
+        recheckConnectivity().catch(() => {});
+
+        if (transmitted) {
+          // Message already went over the radio — store locally and succeed silently
+          console.log("Mesh: Server unreachable but message was transmitted via radio — caching locally");
+          const localMsg: Message = {
+            id: Date.now(),
+            sender: validated.sender,
+            content: validated.content,
+            timestamp: new Date(),
+            transmitted: true,
+            claimedBy: null,
+            loraPacketId: null,
+          };
+          queryClient.setQueryData<Message[]>([api.messages.list.path], (prev) => {
+            if (!prev) return [localMsg];
+            if (prev.some((m) => m.id === localMsg.id)) return prev;
+            return [...prev, localMsg];
+          });
+          return localMsg;
+        }
+
+        // Not transmitted and server is gone — fail loudly
+        throw fetchErr;
+      }
     },
     onSuccess: () => {
       if (serverReachable) {
@@ -166,17 +194,42 @@ export function useSendPrivateMessage(
         return localMsg;
       }
 
-      const res = await fetch(api.messages.create.path, {
-        method: api.messages.create.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sender: myAlias, content: dmContent, transmitted }),
-        credentials: "include",
-      });
+      try {
+        const res = await fetch(api.messages.create.path, {
+          method: api.messages.create.method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sender: myAlias, content: dmContent, transmitted }),
+          credentials: "include",
+        });
 
-      if (!res.ok) throw new Error("Failed to send private message");
+        if (!res.ok) throw new Error("Failed to send private message");
 
-      const data = await res.json();
-      return parseWithLogging(api.messages.create.responses[201], data, "messages.create.dm");
+        const data = await res.json();
+        return parseWithLogging(api.messages.create.responses[201], data, "messages.create.dm");
+      } catch (fetchErr) {
+        recheckConnectivity().catch(() => {});
+
+        if (transmitted) {
+          console.log("Mesh: Server unreachable but DM was transmitted via radio — caching locally");
+          const localMsg: Message = {
+            id: Date.now(),
+            sender: myAlias,
+            content: dmContent,
+            timestamp: new Date(),
+            transmitted: true,
+            claimedBy: null,
+            loraPacketId: null,
+          };
+          queryClient.setQueryData<Message[]>([api.messages.list.path], (prev) => {
+            if (!prev) return [localMsg];
+            if (prev.some((m) => m.id === localMsg.id)) return prev;
+            return [...prev, localMsg];
+          });
+          return localMsg;
+        }
+
+        throw fetchErr;
+      }
     },
     onSuccess: () => {
       if (serverReachable) {
