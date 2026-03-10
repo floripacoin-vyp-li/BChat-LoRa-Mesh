@@ -3,14 +3,17 @@ import { ShieldAlert, Signal, WifiOff, Bluetooth, Usb } from "lucide-react";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ChatInput } from "@/components/chat-input";
 import { ChatMessage } from "@/components/chat-message";
+import { AliasDialog } from "@/components/alias-dialog";
 import { useMessages } from "@/hooks/use-messages";
 import { useBLE } from "@/hooks/use-ble";
 import { useSerial } from "@/hooks/use-serial";
+import { useAlias } from "@/hooks/use-alias";
 
 export default function Dashboard() {
   const { data: messages, isLoading, refetch } = useMessages();
   const ble = useBLE();
   const serial = useSerial();
+  const { alias, setAlias, assignRandom, isSet } = useAlias();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const isConnected = ble.isConnected || serial.isConnected;
@@ -33,6 +36,12 @@ export default function Dashboard() {
     <div className="min-h-screen p-4 md:p-8 flex items-center justify-center relative">
       <div className="absolute top-20 left-20 w-64 h-64 bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
       <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-500/5 rounded-full blur-[120px] pointer-events-none" />
+
+      <AliasDialog
+        open={!isSet}
+        onConfirm={setAlias}
+        onSkip={assignRandom}
+      />
 
       <div className="w-full max-w-4xl h-[85vh] flex flex-col relative z-10">
         <DashboardHeader ble={ble} serial={serial} />
@@ -93,14 +102,14 @@ export default function Dashboard() {
                   </span>
                 </div>
                 {messages.map((msg) => (
-                  <ChatMessage key={msg.id} message={msg} />
+                  <ChatMessage key={msg.id} message={msg} myAlias={alias} />
                 ))}
               </div>
             )}
           </div>
         </div>
 
-        <ChatInput isConnected={isConnected} />
+        <ChatInput isConnected={isConnected} alias={alias} onAliasChange={setAlias} />
       </div>
     </div>
   );
