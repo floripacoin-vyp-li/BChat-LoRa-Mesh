@@ -27,6 +27,11 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  // ── Health check ──────────────────────────────────────────────────────────
+  app.get("/api/health", (_req, res) => {
+    res.json({ ok: true });
+  });
+
   // ── SSE stream ────────────────────────────────────────────────────────────
   app.get(api.messages.stream.path, (req, res) => {
     res.setHeader("Content-Type", "text/event-stream");

@@ -23,8 +23,8 @@ export function useMessages() {
       const data = await res.json();
       return parseWithLogging(api.messages.list.responses[200], data, "messages.list");
     },
-    // SSE handles real-time updates; this is a safety net for any missed events
-    refetchInterval: 10000,
+    // SSE handles real-time updates; skip polling when server is unreachable
+    refetchInterval: () => navigator.onLine ? 10000 : false,
   });
 }
 
@@ -51,6 +51,13 @@ export function useSendMessage() {
 
       // When offline: skip server POST, inject into local cache, still transmitted via radio if available
       if (!navigator.onLine) {
+        if (!transmitted) {
+          throw new Error(
+            (window as any).meshtasticSend
+              ? "BLE transmission failed — check radio connection"
+              : "No radio connected — connect via BLE to transmit offline"
+          );
+        }
         console.log("Mesh: Offline — storing outgoing message locally");
         const localMsg: Message = {
           id: Date.now(),
@@ -88,7 +95,9 @@ export function useSendMessage() {
       return parseWithLogging(api.messages.create.responses[201], data, "messages.create");
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [api.messages.list.path] });
+      if (navigator.onLine) {
+        queryClient.invalidateQueries({ queryKey: [api.messages.list.path] });
+      }
     },
   });
 }
@@ -124,8 +133,15 @@ export function useSendPrivateMessage(
         }
       }
 
-      // Offline: store locally
+      // Offline: store locally if transmitted via BLE, otherwise fail loudly
       if (!navigator.onLine) {
+        if (!transmitted) {
+          throw new Error(
+            (window as any).meshtasticSend
+              ? "BLE transmission failed — check radio connection"
+              : "No radio connected — connect via BLE to transmit offline"
+          );
+        }
         const localMsg: Message = {
           id: Date.now(),
           sender: myAlias,
@@ -156,7 +172,9 @@ export function useSendPrivateMessage(
       return parseWithLogging(api.messages.create.responses[201], data, "messages.create.dm");
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [api.messages.list.path] });
+      if (navigator.onLine) {
+        queryClient.invalidateQueries({ queryKey: [api.messages.list.path] });
+      }
     },
   });
 }

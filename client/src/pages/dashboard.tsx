@@ -40,7 +40,7 @@ export default function Dashboard() {
   const [activeDmContact, setActiveDmContact] = useState<string | null>(null);
 
   useEffect(() => {
-    const handleConnected = () => refetch();
+    const handleConnected = () => { if (navigator.onLine) refetch(); };
     window.addEventListener("ble-connected", handleConnected);
     return () => window.removeEventListener("ble-connected", handleConnected);
   }, [refetch]);

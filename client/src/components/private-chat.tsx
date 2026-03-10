@@ -3,6 +3,7 @@ import { ArrowLeft, Lock, Send } from "lucide-react";
 import type { PrivateMessage } from "@/hooks/use-private-messages";
 import { useSendPrivateMessage } from "@/hooks/use-messages";
 import type { useContacts } from "@/hooks/use-contacts";
+import { useToast } from "@/hooks/use-toast";
 
 interface PrivateChatProps {
   contactAlias: string;
@@ -26,6 +27,7 @@ export function PrivateChat({
   const [content, setContent] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const { mutate: sendDm, isPending } = useSendPrivateMessage(getSharedKey);
+  const { toast } = useToast();
 
   useEffect(() => {
     onMarkRead(contactAlias);
@@ -48,6 +50,13 @@ export function PrivateChat({
         onSuccess: () => {
           onAddSentDm(contactAlias, trimmed);
           setContent("");
+        },
+        onError: (err) => {
+          toast({
+            title: "Message not sent",
+            description: err instanceof Error ? err.message : "Failed to transmit",
+            variant: "destructive",
+          });
         },
       }
     );

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Send, Terminal, Pencil, Check, X } from "lucide-react";
 import { useSendMessage } from "@/hooks/use-messages";
+import { useToast } from "@/hooks/use-toast";
 
 interface ChatInputProps {
   isConnected: boolean;
@@ -13,6 +14,7 @@ export function ChatInput({ isConnected, alias, onAliasChange }: ChatInputProps)
   const [editingAlias, setEditingAlias] = useState(false);
   const [aliasInput, setAliasInput] = useState(alias);
   const { mutate: sendMessage, isPending } = useSendMessage();
+  const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const aliasInputRef = useRef<HTMLInputElement>(null);
 
@@ -34,7 +36,14 @@ export function ChatInput({ isConnected, alias, onAliasChange }: ChatInputProps)
     if (!content.trim() || isPending) return;
 
     sendMessage({ content: content.trim(), sender: alias }, {
-      onSuccess: () => setContent("")
+      onSuccess: () => setContent(""),
+      onError: (err) => {
+        toast({
+          title: "Message not sent",
+          description: err instanceof Error ? err.message : "Failed to transmit",
+          variant: "destructive",
+        });
+      },
     });
   };
 
