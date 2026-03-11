@@ -41,7 +41,7 @@ export function useSendMessage() {
       const isUserMessage = validated.sender !== "system" && validated.sender !== "node";
       if (isUserMessage && (window as any).meshtasticSend) {
         try {
-          const bytes = buildTextToRadio(validated.content);
+          const bytes = buildTextToRadio(`${validated.sender}: ${validated.content}`);
           const writeTimeout = new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error("BLE write timed out after 10s")), 10000)
           );
