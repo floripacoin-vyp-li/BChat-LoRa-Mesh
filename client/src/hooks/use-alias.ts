@@ -32,15 +32,46 @@ export function useAlias() {
   const [alias, setAliasState] = useState<string>(() => {
     return localStorage.getItem(STORAGE_KEY) || "";
   });
-  const [claimError, setClaimError] = useState<string | null>(null);
-
-  const isSet = alias.trim().length > 0;
+  const [isReady, setIsReady] = useState<boolean>(() => {
+    return (localStorage.getItem(STORAGE_KEY) || "").trim().length >= 2;
+  });
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
+
     if (stored && stored.trim().length >= 2) {
       serverClaimAlias(stored.trim());
+      setIsReady(true);
+      return;
     }
+
+    let cancelled = false;
+    (async () => {
+      for (let attempt = 0; attempt < 10; attempt++) {
+        if (cancelled) return;
+        const handle = randomHandle();
+        const result = await serverClaimAlias(handle);
+        if (cancelled) return;
+        if (result === "ok") {
+          localStorage.setItem(STORAGE_KEY, handle);
+          setAliasState(handle);
+          setIsReady(true);
+          return;
+        }
+        if (result === "offline") {
+          localStorage.setItem(STORAGE_KEY, handle);
+          setAliasState(handle);
+          setIsReady(true);
+          return;
+        }
+      }
+      const fallback = randomHandle();
+      localStorage.setItem(STORAGE_KEY, fallback);
+      setAliasState(fallback);
+      setIsReady(true);
+    })();
+
+    return () => { cancelled = true; };
   }, []);
 
   const claimAlias = useCallback(async (value: string): Promise<"ok" | "taken"> => {
@@ -49,7 +80,6 @@ export function useAlias() {
     if (result === "taken") return "taken";
     localStorage.setItem(STORAGE_KEY, trimmed);
     setAliasState(trimmed);
-    setClaimError(null);
     return "ok";
   }, []);
 
@@ -68,5 +98,5 @@ export function useAlias() {
     return handle;
   }, []);
 
-  return { alias, setAlias, claimAlias, assignRandom, isSet, claimError };
+  return { alias, setAlias, claimAlias, assignRandom, isReady };
 }

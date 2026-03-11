@@ -3,7 +3,7 @@ import { Lock, ShieldAlert, ShieldCheck, Signal, WifiOff, Bluetooth, Usb } from 
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ChatInput } from "@/components/chat-input";
 import { ChatMessage } from "@/components/chat-message";
-import { AliasDialog } from "@/components/alias-dialog";
+
 import { ContactsPanel } from "@/components/contacts-panel";
 import { PrivateChat } from "@/components/private-chat";
 import { useMessages } from "@/hooks/use-messages";
@@ -23,7 +23,7 @@ export default function Dashboard() {
   const { data: messages, isLoading, refetch } = useMessages();
   const ble = useBLE();
   const serial = useSerial();
-  const { alias, setAlias, claimAlias, assignRandom, isSet } = useAlias();
+  const { alias, claimAlias, isReady } = useAlias();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const isConnected = ble.isConnected || serial.isConnected;
@@ -73,13 +73,14 @@ export default function Dashboard() {
       <div className="absolute top-20 left-20 w-64 h-64 bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
       <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-500/5 rounded-full blur-[120px] pointer-events-none" />
 
-      <AliasDialog
-        open={!isSet}
-        onConfirm={claimAlias}
-        onSkip={assignRandom}
-      />
+      {!isReady && (
+        <div className="flex flex-col items-center gap-3 text-muted-foreground/50 font-mono text-sm animate-pulse">
+          <span className="text-primary/40">⬡</span>
+          <span>Initializing identity…</span>
+        </div>
+      )}
 
-      <div className="w-full max-w-4xl h-[85vh] flex flex-col relative z-10">
+      {isReady && <div className="w-full max-w-4xl h-[85vh] flex flex-col relative z-10">
         <DashboardHeader ble={ble} serial={serial} isOnline={isOnline} isConnected={isConnected} />
 
         <div className="flex-1 glass-panel border-y-0 relative flex flex-col overflow-hidden bg-card/60">
@@ -244,8 +245,8 @@ export default function Dashboard() {
           )}
         </div>
 
-        <ChatInput isConnected={isConnected} isOnline={isOnline} isMeshtasticReady={isMeshtasticReady} alias={alias} onAliasChange={setAlias} />
-      </div>
+        <ChatInput isConnected={isConnected} isOnline={isOnline} isMeshtasticReady={isMeshtasticReady} alias={alias} onAliasChange={claimAlias} />
+      </div>}
     </div>
   );
 }
