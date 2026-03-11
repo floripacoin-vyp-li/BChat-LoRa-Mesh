@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Trash2, MessageSquareLock, ChevronRight, QrCode, ScanLine, KeyRound } from "lucide-react";
+import { X, Trash2, MessageSquareLock, ChevronRight, QrCode, ScanLine, KeyRound, Search, Loader2 } from "lucide-react";
 import { QRCodeDisplay } from "@/components/qr-code";
 import { QRScanner, buildQRKeyPayload, type ScannedKey } from "@/components/qr-scanner";
 import type { Contact } from "@/hooks/use-contacts";
@@ -15,7 +15,7 @@ interface ContactsPanelProps {
   onClose: () => void;
 }
 
-type AddMode = "idle" | "scanning" | "confirm" | "paste";
+type AddMode = "idle" | "scanning" | "confirm" | "paste" | "lookup" | "lookup-confirm";
 
 export function ContactsPanel({
   contacts,
@@ -35,6 +35,11 @@ export function ContactsPanel({
   const [pasteKey, setPasteKey] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
+
+  const [lookupAlias, setLookupAlias] = useState("");
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [lookupResult, setLookupResult] = useState<{ alias: string; publicKey: string } | null>(null);
+  const [isLooking, setIsLooking] = useState(false);
 
   const myQRPayload =
     myPublicKeyBase64 ? buildQRKeyPayload(myAlias, myPublicKeyBase64) : null;
@@ -76,6 +81,47 @@ export function ContactsPanel({
     }
   };
 
+  const handleLookup = async () => {
+    const alias = lookupAlias.trim();
+    if (!alias) return;
+    setLookupError(null);
+    setIsLooking(true);
+    try {
+      const res = await fetch(`/api/users/${encodeURIComponent(alias)}`);
+      if (res.status === 404) {
+        setLookupError("Alias not found. They need to open the app first.");
+        setIsLooking(false);
+        return;
+      }
+      if (!res.ok) {
+        setLookupError("Server error. Please try again.");
+        setIsLooking(false);
+        return;
+      }
+      const data = await res.json();
+      setLookupResult({ alias: data.alias, publicKey: data.publicKey });
+      setAddMode("lookup-confirm");
+    } catch {
+      setLookupError("Could not reach server.");
+    } finally {
+      setIsLooking(false);
+    }
+  };
+
+  const handleConfirmLookup = async () => {
+    if (!lookupResult) return;
+    setAddError(null);
+    setIsAdding(true);
+    try {
+      await onAddContact(lookupResult.alias, lookupResult.publicKey);
+      cancelAdd();
+    } catch (e: any) {
+      setAddError(e.message ?? "Could not add contact");
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
   const cancelAdd = () => {
     setAddMode("idle");
     setAddError(null);
@@ -83,6 +129,9 @@ export function ContactsPanel({
     setScannedKey("");
     setPasteAlias("");
     setPasteKey("");
+    setLookupAlias("");
+    setLookupError(null);
+    setLookupResult(null);
   };
 
   const truncateKey = (key: string) =>
@@ -90,7 +139,6 @@ export function ContactsPanel({
 
   return (
     <>
-      {/* QR Scanner full-screen overlay */}
       {addMode === "scanning" && (
         <QRScanner
           onScanned={handleScanned}
@@ -99,7 +147,6 @@ export function ContactsPanel({
       )}
 
       <div className="absolute inset-0 z-20 glass-panel rounded-2xl flex flex-col overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
           <div className="flex items-center gap-2">
             <MessageSquareLock size={16} className="text-primary" />
@@ -167,8 +214,17 @@ export function ContactsPanel({
               {addMode === "idle" && (
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setAddMode("scanning")}
+                    onClick={() => { setAddMode("lookup"); setLookupError(null); }}
                     className="flex items-center gap-1 text-[10px] font-mono text-primary hover:text-primary/80 transition-colors uppercase tracking-wide"
+                    data-testid="button-find-alias"
+                  >
+                    <Search size={11} />
+                    Find
+                  </button>
+                  <span className="text-muted-foreground/20 text-[10px]">|</span>
+                  <button
+                    onClick={() => setAddMode("scanning")}
+                    className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground/50 hover:text-primary transition-colors uppercase tracking-wide"
                     data-testid="button-scan-qr"
                   >
                     <ScanLine size={11} />
@@ -186,6 +242,81 @@ export function ContactsPanel({
                 </div>
               )}
             </div>
+
+            {/* Find by alias */}
+            {addMode === "lookup" && (
+              <div className="bg-background/50 border border-white/10 rounded-xl p-3 mb-3 space-y-2">
+                <p className="text-[10px] font-mono text-primary/70 uppercase tracking-wide">
+                  Find contact by alias
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Their alias..."
+                    value={lookupAlias}
+                    onChange={(e) => { setLookupAlias(e.target.value); setLookupError(null); }}
+                    onKeyDown={(e) => e.key === "Enter" && !isLooking && handleLookup()}
+                    maxLength={24}
+                    className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40"
+                    data-testid="input-lookup-alias"
+                  />
+                  <button
+                    onClick={handleLookup}
+                    disabled={isLooking || !lookupAlias.trim()}
+                    className="px-3 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-colors disabled:opacity-40 flex items-center gap-1.5 text-xs font-mono"
+                    data-testid="button-lookup-search"
+                  >
+                    {isLooking ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+                    {isLooking ? "" : "Search"}
+                  </button>
+                </div>
+                {lookupError && (
+                  <p className="text-[10px] font-mono text-destructive" data-testid="text-lookup-error">{lookupError}</p>
+                )}
+                <button
+                  onClick={cancelAdd}
+                  className="text-xs font-mono text-muted-foreground/50 hover:text-foreground transition-colors"
+                  data-testid="button-cancel-lookup"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {/* Lookup confirm */}
+            {addMode === "lookup-confirm" && lookupResult && (
+              <div className="bg-background/50 border border-primary/30 rounded-xl p-3 mb-3 space-y-2">
+                <p className="text-[10px] font-mono text-primary/70 uppercase tracking-wide">
+                  Found — confirm to add
+                </p>
+                <div className="bg-black/20 rounded-lg px-3 py-2 space-y-1">
+                  <p className="text-sm font-mono text-foreground font-medium">{lookupResult.alias}</p>
+                  <p className="text-[10px] font-mono text-muted-foreground/40 break-all">{truncateKey(lookupResult.publicKey)}</p>
+                </div>
+                {addError && (
+                  <p className="text-[10px] font-mono text-destructive">{addError}</p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleConfirmLookup}
+                    disabled={isAdding}
+                    className="flex-1 bg-primary/20 hover:bg-primary/30 text-primary text-xs font-mono py-1.5 rounded-lg transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5"
+                    data-testid="button-confirm-lookup"
+                  >
+                    {isAdding && <Loader2 size={12} className="animate-spin" />}
+                    {isAdding ? "Adding…" : "Add Contact"}
+                  </button>
+                  <button
+                    onClick={cancelAdd}
+                    className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors px-3"
+                    data-testid="button-cancel-lookup-confirm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Confirm scanned contact */}
             {addMode === "confirm" && (
@@ -274,9 +405,9 @@ export function ContactsPanel({
             {/* Contact rows */}
             {contacts.length === 0 && addMode === "idle" ? (
               <div className="text-center py-8 space-y-3">
-                <ScanLine size={28} className="text-muted-foreground/20 mx-auto" />
+                <Search size={28} className="text-muted-foreground/20 mx-auto" />
                 <p className="text-xs font-mono text-muted-foreground/40">
-                  Tap <span className="text-primary">Scan</span> to add a contact by scanning their QR code
+                  Tap <span className="text-primary">Find</span> to add a contact by alias, or <span className="text-primary">Scan</span> their QR code
                 </p>
               </div>
             ) : (
