@@ -1,9 +1,9 @@
-import { Activity, Bluetooth, Check, Clipboard, Cpu, LogOut, Power, QrCode, ShieldCheck, Trash2, Usb } from "lucide-react";
+import { Activity, Bluetooth, Check, Clipboard, Clock, Cpu, LogOut, Power, QrCode, ShieldCheck, Trash2, Usb } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import { useBLE } from "@/hooks/use-ble";
 import { useSerial } from "@/hooks/use-serial";
-import { useClearLocalMessages } from "@/hooks/use-messages";
+import { useClearLocalMessages, usePurgeRecentMessages } from "@/hooks/use-messages";
 import { QRCodeDisplay } from "@/components/qr-code";
 import {
   AlertDialog,
@@ -36,6 +36,7 @@ const serialSupported = typeof navigator !== "undefined" && "serial" in navigato
 
 export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, totalUnread }: DashboardHeaderProps) {
   const { clear: clearLocalMessages } = useClearLocalMessages();
+  const { mutate: purgeRecent, isPending: isPurging } = usePurgeRecentMessages();
   const anyConnected = ble.isConnected || serial.isConnected;
   const anyConnecting = ble.isConnecting || serial.isConnecting;
   const [qrOpen, setQrOpen] = useState(false);
@@ -185,6 +186,38 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, 
             )}
           </DialogContent>
         </Dialog>
+
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <button
+              className="px-3 py-2 rounded-lg border border-destructive/20 text-destructive/80 hover:bg-destructive/10 hover:text-destructive flex items-center gap-2 text-xs font-mono transition-colors disabled:opacity-40"
+              title="Purge last hour from server"
+              data-testid="button-purge-recent"
+              disabled={isPurging}
+            >
+              <Clock size={14} />
+              <span className="hidden sm:inline">Purge 1h</span>
+            </button>
+          </AlertDialogTrigger>
+          <AlertDialogContent className="bg-card border-border/50 font-mono">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Purge last hour from server?</AlertDialogTitle>
+              <AlertDialogDescription className="text-muted-foreground">
+                This permanently deletes messages from the last hour for ALL users. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="bg-secondary text-secondary-foreground border-white/10 hover:bg-white/5">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => purgeRecent()}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                data-testid="button-confirm-purge-recent"
+              >
+                Purge
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <AlertDialog>
           <AlertDialogTrigger asChild>

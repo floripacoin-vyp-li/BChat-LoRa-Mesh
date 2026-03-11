@@ -102,6 +102,18 @@ export async function registerRoutes(
     }
   });
 
+  // ── Purge recent messages (last N hours) ─────────────────────────────────
+  app.delete("/api/messages/recent", async (req, res) => {
+    try {
+      const hours = parseInt(String(req.query.hours ?? "1"), 10) || 1;
+      const deleted = await storage.deleteRecentMessages(hours);
+      broadcastClear();
+      res.json({ deleted });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to purge recent messages" });
+    }
+  });
+
   // ── Clear messages ────────────────────────────────────────────────────────
   app.delete(api.messages.clear.path, async (req, res) => {
     try {
