@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { useBLE } from "@/hooks/use-ble";
 import { useSerial } from "@/hooks/use-serial";
-import { useClearMessages } from "@/hooks/use-messages";
+import { useClearLocalMessages } from "@/hooks/use-messages";
 import { QRCodeDisplay } from "@/components/qr-code";
 import {
   AlertDialog,
@@ -33,7 +33,7 @@ interface DashboardHeaderProps {
 const serialSupported = typeof navigator !== "undefined" && "serial" in navigator;
 
 export function DashboardHeader({ ble, serial, isOnline, isConnected }: DashboardHeaderProps) {
-  const { mutate: clearMessages, isPending: isClearing } = useClearMessages();
+  const { clear: clearLocalMessages } = useClearLocalMessages();
   const anyConnected = ble.isConnected || serial.isConnected;
   const anyConnecting = ble.isConnecting || serial.isConnecting;
   const [qrOpen, setQrOpen] = useState(false);
@@ -68,7 +68,7 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected }: Dashboar
         </div>
         <div>
           <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            Bit Chat{" "}
+            BChat{" "}
             <span className={`font-mono text-xs px-2 py-0.5 rounded-full border transition-colors duration-500 ${
               isOnline
                 ? "text-green-400 bg-green-400/10 border-green-400/30"
@@ -197,18 +197,18 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected }: Dashboar
           </AlertDialogTrigger>
           <AlertDialogContent className="bg-card border-border/50 font-mono">
             <AlertDialogHeader>
-              <AlertDialogTitle>Purge communication logs?</AlertDialogTitle>
+              <AlertDialogTitle>Clear your local view?</AlertDialogTitle>
               <AlertDialogDescription className="text-muted-foreground">
-                This will delete all local messages from the bridge terminal. This action cannot be undone.
+                This clears the message log from your screen only. Other users are not affected and the channel history is preserved.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel className="bg-secondary text-secondary-foreground border-white/10 hover:bg-white/5">Cancel</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => clearMessages()}
+                onClick={() => clearLocalMessages()}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                {isClearing ? "Purging..." : "Purge Logs"}
+                Clear My View
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

@@ -255,3 +255,12 @@ export function useClearMessages() {
     },
   });
 }
+
+export function useClearLocalMessages() {
+  const queryClient = useQueryClient();
+  return {
+    clear: () => {
+      queryClient.setQueryData<Message[]>([api.messages.list.path], []);
+    },
+  };
+}

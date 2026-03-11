@@ -117,8 +117,14 @@ export function useBLE() {
       (window as any).meshtasticDevice = device;
       (window as any)._meshtasticTransport = "ble";
       (window as any).meshtasticSend = async (bytes: Uint8Array) => {
-        if (typeof toRadioChar.writeValueWithoutResponse === "function") {
+        // Check the characteristic's actual property flags — not just method existence.
+        // writeValueWithoutResponse exists on the prototype in all modern Chrome versions
+        // but throws NotSupportedError if the characteristic doesn't advertise the property.
+        if (toRadioChar.properties?.writeWithoutResponse) {
           return toRadioChar.writeValueWithoutResponse(bytes);
+        }
+        if (typeof (toRadioChar as any).writeValueWithResponse === "function") {
+          return (toRadioChar as any).writeValueWithResponse(bytes);
         }
         return toRadioChar.writeValue(bytes);
       };
@@ -159,10 +165,14 @@ export function useBLE() {
         try {
           console.log("BLE: Sending wantConfigId handshake...");
           await (async () => {
-            if (typeof toRadioChar.writeValueWithoutResponse === "function") {
-              return toRadioChar.writeValueWithoutResponse(buildWantConfig());
+            const cfg = buildWantConfig();
+            if (toRadioChar.properties?.writeWithoutResponse) {
+              return toRadioChar.writeValueWithoutResponse(cfg);
             }
-            return toRadioChar.writeValue(buildWantConfig());
+            if (typeof (toRadioChar as any).writeValueWithResponse === "function") {
+              return (toRadioChar as any).writeValueWithResponse(cfg);
+            }
+            return toRadioChar.writeValue(cfg);
           })();
 
           console.log("BLE: Initial fromRadio drain...");
