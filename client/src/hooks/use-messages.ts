@@ -81,12 +81,16 @@ export function useSendMessage() {
       }
 
       try {
+        const controller = new AbortController();
+        const sendTimeout = setTimeout(() => controller.abort(), 5000);
         const res = await fetch(api.messages.create.path, {
           method: api.messages.create.method,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...validated, transmitted }),
           credentials: "include",
+          signal: controller.signal,
         });
+        clearTimeout(sendTimeout);
 
         if (!res.ok) {
           if (res.status === 400) {
