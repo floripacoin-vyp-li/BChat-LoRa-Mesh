@@ -1,10 +1,12 @@
 import { db } from "./db";
 import {
   messages,
+  users,
   type InsertMessage,
-  type Message
+  type Message,
+  type User,
 } from "@shared/schema";
-import { eq, asc, gt, and, notInArray, isNull, sql } from "drizzle-orm";
+import { eq, asc, gt, and, notInArray, isNull } from "drizzle-orm";
 
 export interface IStorage {
   getMessages(): Promise<Message[]>;
@@ -14,6 +16,8 @@ export interface IStorage {
   markTransmitted(id: number): Promise<void>;
   claimMessage(id: number, operatorId: string): Promise<boolean>;
   getByLoraPacketId(packetId: string): Promise<Message | null>;
+  claimAlias(alias: string, publicKey: string): Promise<"ok" | "taken">;
+  getUserByAlias(alias: string): Promise<User | null>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -22,8 +26,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createMessage(insertMessage: InsertMessage): Promise<Message> {
-    // Idempotent insert for LoRa packets — if this packet ID already exists,
-    // return the existing row instead of creating a duplicate.
     if (insertMessage.loraPacketId) {
       const existing = await this.getByLoraPacketId(insertMessage.loraPacketId);
       if (existing) {
@@ -85,6 +87,24 @@ export class DatabaseStorage implements IStorage {
       .where(eq(messages.loraPacketId, packetId))
       .limit(1);
     return msg ?? null;
+  }
+
+  async claimAlias(alias: string, publicKey: string): Promise<"ok" | "taken"> {
+    const existing = await this.getUserByAlias(alias);
+    if (existing) {
+      return existing.publicKey === publicKey ? "ok" : "taken";
+    }
+    await db.insert(users).values({ alias, publicKey });
+    return "ok";
+  }
+
+  async getUserByAlias(alias: string): Promise<User | null> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.alias, alias))
+      .limit(1);
+    return user ?? null;
   }
 }
 

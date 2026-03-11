@@ -183,6 +183,40 @@ export async function registerRoutes(
     res.json({ count: activeOperators.size });
   });
 
+  // ── Alias claim — registers alias → publicKey binding ────────────────────
+  const claimAliasSchema = z.object({
+    alias: z.string().min(2).max(24),
+    publicKey: z.string().min(1),
+  });
+
+  app.post("/api/users/claim", async (req, res) => {
+    try {
+      const { alias, publicKey } = claimAliasSchema.parse(req.body);
+      const result = await storage.claimAlias(alias, publicKey);
+      if (result === "ok") {
+        res.json({ ok: true });
+      } else {
+        res.status(409).json({ ok: false, message: "Alias already taken" });
+      }
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      res.status(500).json({ message: "Failed to claim alias" });
+    }
+  });
+
+  app.get("/api/users/:alias", async (req, res) => {
+    try {
+      const alias = req.params.alias;
+      const user = await storage.getUserByAlias(alias);
+      if (!user) return res.status(404).json({ message: "Alias not found" });
+      res.json({ alias: user.alias, publicKey: user.publicKey });
+    } catch (err) {
+      res.status(500).json({ message: "Failed to look up alias" });
+    }
+  });
+
   // ── Local network info — used by QR "Scan to Join" to build hotspot URL ───
   app.get("/api/network-info", (req, res) => {
     const port = process.env.PORT ? parseInt(process.env.PORT) : 5000;

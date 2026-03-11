@@ -23,7 +23,7 @@ export default function Dashboard() {
   const { data: messages, isLoading, refetch } = useMessages();
   const ble = useBLE();
   const serial = useSerial();
-  const { alias, setAlias, assignRandom, isSet } = useAlias();
+  const { alias, setAlias, claimAlias, assignRandom, isSet } = useAlias();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const isConnected = ble.isConnected || serial.isConnected;
@@ -75,7 +75,7 @@ export default function Dashboard() {
 
       <AliasDialog
         open={!isSet}
-        onConfirm={setAlias}
+        onConfirm={claimAlias}
         onSkip={assignRandom}
       />
 

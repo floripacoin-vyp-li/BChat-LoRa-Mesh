@@ -24,3 +24,17 @@ export const insertMessageSchema = createInsertSchema(messages)
 
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Message = typeof messages.$inferSelect;
+
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  alias: text("alias").notNull(),
+  publicKey: text("public_key").notNull(),
+  registeredAt: timestamp("registered_at").defaultNow(),
+}, (table) => ({
+  aliasUniq: uniqueIndex("users_alias_unique").on(table.alias),
+}));
+
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, registeredAt: true });
+
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type User = typeof users.$inferSelect;

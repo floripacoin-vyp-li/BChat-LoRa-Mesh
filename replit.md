@@ -110,6 +110,15 @@ Provides: hardware table with purchase links, Arduino IDE setup steps, configura
   5. `isOnline && !isConnected && !gatewayOnline` → red "Uplink Severed"
 - **ChatInput** disables input + send button with hint when `!isOnline && !isConnected`
 
+## Alias Uniqueness
+
+Each user alias is registered server-side and bound to an ECDH public key in the `users` table:
+- `POST /api/users/claim` — registers `{ alias, publicKey }`. Returns 200 if free or same key (idempotent), 409 if taken by a different key.
+- `GET /api/users/:alias` — returns `{ alias, publicKey }` for a given alias (foundation for Option C secure DMs without QR scan).
+- On app load, if a stored alias is found in localStorage, it is silently re-claimed (handles returning users).
+- The `AliasDialog` shows a loading state ("Checking...") while the claim is in flight, and an inline error if the alias is already taken.
+- `claimAlias(alias)` in `useAlias` returns `"ok"` or `"taken"` — only `"ok"` closes the dialog.
+
 ## Important Notes
 - Web Bluetooth and Web Serial only work in Chrome/Edge (not in iframes — use a standalone tab)
 - Web Bluetooth cannot advertise as a peripheral — the app connects TO BitChat devices, not the other way around
