@@ -1,5 +1,6 @@
 import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
 import { Mesh, Portnums } from "@meshtastic/protobufs";
+import { serverReachable } from "@/hooks/use-connectivity";
 
 // Serial framing constants (Meshtastic stream protocol)
 export const SERIAL_START1 = 0x94;
@@ -73,8 +74,8 @@ export function processFromRadio(bytes: Uint8Array): void {
           if (text.trim().length > 0) {
             const content = `[${senderLabel}] ${text}`;
 
-            if (!navigator.onLine) {
-              console.log("Mesh: Offline — routing incoming packet to local cache");
+            if (!serverReachable) {
+              console.log("Mesh: Server unreachable — routing incoming packet to local cache");
               dispatchLocalMessage({
                 id: Date.now(),
                 sender: "node",
@@ -93,6 +94,17 @@ export function processFromRadio(bytes: Uint8Array): void {
               body: JSON.stringify({ sender: "node", content, transmitted: true, loraPacketId }),
             }).then(() => {
               (window as any).queryClient?.invalidateQueries({ queryKey: ["/api/messages"] });
+            }).catch((err) => {
+              console.warn("Mesh: Server POST failed — routing incoming packet to local cache:", err);
+              dispatchLocalMessage({
+                id: Date.now(),
+                sender: "node",
+                content,
+                timestamp: new Date().toISOString(),
+                transmitted: true,
+                claimedBy: null,
+                loraPacketId,
+              });
             });
           }
         } else if (decoded.portnum === BITCHAT_PORT) {
@@ -102,8 +114,8 @@ export function processFromRadio(bytes: Uint8Array): void {
 
           const content = `[BLB] LoRa → BitChat: ${blbBytes.length}B from ${senderLabel}`;
 
-          if (!navigator.onLine) {
-            console.log("Mesh: Offline — routing BLB packet to local cache");
+          if (!serverReachable) {
+            console.log("Mesh: Server unreachable — routing BLB packet to local cache");
             dispatchLocalMessage({
               id: Date.now(),
               sender: "system",
@@ -122,6 +134,17 @@ export function processFromRadio(bytes: Uint8Array): void {
             body: JSON.stringify({ sender: "system", content, transmitted: true, loraPacketId }),
           }).then(() => {
             (window as any).queryClient?.invalidateQueries({ queryKey: ["/api/messages"] });
+          }).catch((err) => {
+            console.warn("Mesh: Server POST failed — routing BLB packet to local cache:", err);
+            dispatchLocalMessage({
+              id: Date.now(),
+              sender: "system",
+              content,
+              timestamp: new Date().toISOString(),
+              transmitted: true,
+              claimedBy: null,
+              loraPacketId,
+            });
           });
         }
       } else if (payloadCase === "encrypted") {
@@ -192,7 +215,7 @@ function dispatchSystemLocal(content: string): void {
 }
 
 export function postSystemMessage(content: string): void {
-  if (!navigator.onLine) {
+  if (!serverReachable) {
     dispatchSystemLocal(content);
     return;
   }

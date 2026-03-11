@@ -120,7 +120,7 @@ export function useRelay(isConnected: boolean) {
             }
 
             // We won the claim — transmit over radio.
-            const bytes = buildTextToRadio(msg.content);
+            const bytes = buildTextToRadio(`${msg.sender}: ${msg.content}`);
             await (window as any).meshtasticSend(bytes);
 
             await fetch(`/api/messages/${msg.id}/transmitted`, {
