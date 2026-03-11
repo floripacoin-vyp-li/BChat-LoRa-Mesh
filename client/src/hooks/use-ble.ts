@@ -113,14 +113,14 @@ export function useBLE() {
       // Android's GATT stack often fails characteristic discovery on the first attempt;
       // retry up to 3 times with a short delay before giving up.
       let toRadioChar: BluetoothRemoteGATTCharacteristic | null = null;
-      for (let attempt = 1; attempt <= 3; attempt++) {
+      for (let attempt = 1; attempt <= 5; attempt++) {
         try {
           toRadioChar = await service.getCharacteristic(TORADIO_UUID);
           break;
         } catch (e) {
-          if (attempt === 3) throw e;
+          if (attempt === 5) throw e;
           console.warn(`BLE: TORADIO discovery attempt ${attempt} failed — retrying...`);
-          await new Promise((r) => setTimeout(r, 600));
+          await new Promise((r) => setTimeout(r, 1000));
         }
       }
       if (!toRadioChar) throw new Error("TORADIO characteristic not found after retries");

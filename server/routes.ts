@@ -189,9 +189,14 @@ export async function registerRoutes(
     publicKey: z.string().min(1),
   });
 
+  const RESERVED_ALIASES = new Set(["system", "node", "gateway", "broadcast", "server", "admin"]);
+
   app.post("/api/users/claim", async (req, res) => {
     try {
       const { alias, publicKey } = claimAliasSchema.parse(req.body);
+      if (RESERVED_ALIASES.has(alias.toLowerCase())) {
+        return res.status(409).json({ ok: false, message: "Alias already taken" });
+      }
       const result = await storage.claimAlias(alias, publicKey);
       if (result === "ok") {
         res.json({ ok: true });

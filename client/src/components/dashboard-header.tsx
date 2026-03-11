@@ -1,4 +1,4 @@
-import { Activity, Bluetooth, Check, Clipboard, Cpu, LogOut, Power, QrCode, Trash2, Usb } from "lucide-react";
+import { Activity, Bluetooth, Check, Clipboard, Cpu, LogOut, Power, QrCode, ShieldCheck, Trash2, Usb } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import { useBLE } from "@/hooks/use-ble";
@@ -28,11 +28,13 @@ interface DashboardHeaderProps {
   serial: ReturnType<typeof useSerial>;
   isOnline: boolean;
   isConnected: boolean;
+  onOpenDm: () => void;
+  totalUnread: number;
 }
 
 const serialSupported = typeof navigator !== "undefined" && "serial" in navigator;
 
-export function DashboardHeader({ ble, serial, isOnline, isConnected }: DashboardHeaderProps) {
+export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, totalUnread }: DashboardHeaderProps) {
   const { clear: clearLocalMessages } = useClearLocalMessages();
   const anyConnected = ble.isConnected || serial.isConnected;
   const anyConnecting = ble.isConnecting || serial.isConnecting;
@@ -213,6 +215,21 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected }: Dashboar
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <button
+          onClick={onOpenDm}
+          className="px-3 py-2 rounded-lg border border-primary/20 text-primary/70 hover:bg-primary/10 hover:border-primary/50 hover:text-primary flex items-center gap-2 text-xs font-mono transition-colors relative"
+          title="Secure Contacts"
+          data-testid="button-open-dm-panel"
+        >
+          <ShieldCheck size={14} />
+          <span className="hidden sm:inline">Secure</span>
+          {totalUnread > 0 && (
+            <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[9px] font-mono px-1 rounded-full leading-none py-0.5 min-w-[16px] text-center" data-testid="badge-unread-dm">
+              {totalUnread}
+            </span>
+          )}
+        </button>
 
         <AlertDialog>
           <AlertDialogTrigger asChild>

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Lock, ShieldAlert, ShieldCheck, Signal, WifiOff, Bluetooth, Usb } from "lucide-react";
+import { Lock, ShieldAlert, Signal, WifiOff, Bluetooth, Usb } from "lucide-react";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ChatInput } from "@/components/chat-input";
 import { ChatMessage } from "@/components/chat-message";
@@ -81,7 +81,7 @@ export default function Dashboard() {
       )}
 
       {isReady && <div className="w-full max-w-4xl h-[85vh] flex flex-col relative z-10">
-        <DashboardHeader ble={ble} serial={serial} isOnline={isOnline} isConnected={isConnected} />
+        <DashboardHeader ble={ble} serial={serial} isOnline={isOnline} isConnected={isConnected} onOpenDm={() => setDmPanelOpen(true)} totalUnread={totalUnread} />
 
         <div className="flex-1 glass-panel border-y-0 relative flex flex-col overflow-hidden bg-card/60">
           {/* Connection Status Banner */}
@@ -157,22 +157,6 @@ export default function Dashboard() {
               </div>
             );
           })()}
-
-          {/* DM Button */}
-          <button
-            onClick={() => setDmPanelOpen(true)}
-            className="absolute top-10 right-3 z-10 flex items-center gap-1.5 bg-background/60 hover:bg-primary/10 border border-primary/20 hover:border-primary/50 rounded-lg px-2.5 py-2 transition-colors"
-            title="Secure Contacts"
-            data-testid="button-open-dm-panel"
-          >
-            <ShieldCheck size={16} className="text-primary" />
-            <span className="text-[10px] font-mono text-primary">Secure</span>
-            {totalUnread > 0 && (
-              <span className="bg-primary text-primary-foreground text-[10px] font-mono px-1 rounded-full leading-none py-0.5" data-testid="badge-unread-dm">
-                {totalUnread}
-              </span>
-            )}
-          </button>
 
           {/* Messages Scroll Area */}
           <div
