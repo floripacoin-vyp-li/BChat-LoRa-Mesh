@@ -1,4 +1,4 @@
-import { Activity, Bluetooth, Check, Clipboard, Cpu, Power, QrCode, Trash2, Usb } from "lucide-react";
+import { Activity, Bluetooth, Check, Clipboard, Cpu, LogOut, Power, QrCode, Trash2, Usb } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import { useBLE } from "@/hooks/use-ble";
@@ -209,6 +209,47 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected }: Dashboar
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
                 Clear My View
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <button
+              className="px-3 py-2 rounded-lg border border-white/10 text-muted-foreground/60 hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive flex items-center gap-2 text-xs font-mono transition-colors"
+              title="Reset Identity — clears alias, contacts and keys"
+              data-testid="button-reset-identity"
+            >
+              <LogOut size={14} />
+              <span className="hidden sm:inline">Reset</span>
+            </button>
+          </AlertDialogTrigger>
+          <AlertDialogContent className="bg-card border-border/50 font-mono">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Reset your identity?</AlertDialogTitle>
+              <AlertDialogDescription className="text-muted-foreground">
+                This will clear your alias, contacts, and encryption keys from this device. You will be asked to choose a new alias on next load. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="bg-secondary text-secondary-foreground border-white/10 hover:bg-white/5">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={async () => {
+                  localStorage.removeItem("bcb-alias");
+                  localStorage.removeItem("bcb-contacts");
+                  await new Promise<void>((resolve) => {
+                    const req = indexedDB.deleteDatabase("bcb-crypto");
+                    req.onsuccess = () => resolve();
+                    req.onerror = () => resolve();
+                    req.onblocked = () => resolve();
+                  });
+                  window.location.reload();
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                data-testid="button-confirm-reset-identity"
+              >
+                Reset Identity
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
