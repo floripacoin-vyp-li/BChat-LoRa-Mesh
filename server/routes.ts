@@ -102,17 +102,20 @@ export async function registerRoutes(
     }
   });
 
-  // ── Purge recent messages (last N hours) ─────────────────────────────────
-  app.delete("/api/messages/recent", async (req, res) => {
+  // ── Auto-purge: delete messages older than 1 hour every 15 minutes ───────
+  const runAutoPurge = async () => {
     try {
-      const hours = parseInt(String(req.query.hours ?? "1"), 10) || 1;
-      const deleted = await storage.deleteRecentMessages(hours);
-      broadcastClear();
-      res.json({ deleted });
+      const deleted = await storage.deleteMessagesOlderThan(1);
+      if (deleted > 0) {
+        console.log(`[purge] Removed ${deleted} message(s) older than 1 hour`);
+        broadcastClear();
+      }
     } catch (err) {
-      res.status(500).json({ message: "Failed to purge recent messages" });
+      console.error("[purge] Auto-purge failed:", err);
     }
-  });
+  };
+  runAutoPurge();
+  setInterval(runAutoPurge, 15 * 60 * 1000);
 
   // ── Clear messages ────────────────────────────────────────────────────────
   app.delete(api.messages.clear.path, async (req, res) => {

@@ -6,13 +6,13 @@ import {
   type Message,
   type User,
 } from "@shared/schema";
-import { eq, asc, gt, and, notInArray, isNull, gte, sql } from "drizzle-orm";
+import { eq, asc, gt, and, notInArray, isNull, lt, sql } from "drizzle-orm";
 
 export interface IStorage {
   getMessages(): Promise<Message[]>;
   createMessage(message: InsertMessage): Promise<Message>;
   clearMessages(): Promise<void>;
-  deleteRecentMessages(hours: number): Promise<number>;
+  deleteMessagesOlderThan(hours: number): Promise<number>;
   getPendingMessages(afterId: number): Promise<Message[]>;
   markTransmitted(id: number): Promise<void>;
   claimMessage(id: number, operatorId: string): Promise<boolean>;
@@ -45,11 +45,11 @@ export class DatabaseStorage implements IStorage {
     await db.delete(messages);
   }
 
-  async deleteRecentMessages(hours: number): Promise<number> {
+  async deleteMessagesOlderThan(hours: number): Promise<number> {
     const cutoff = sql`NOW() - ${hours} * INTERVAL '1 hour'`;
     const result = await db
       .delete(messages)
-      .where(gte(messages.timestamp, cutoff))
+      .where(lt(messages.timestamp, cutoff))
       .returning({ id: messages.id });
     return result.length;
   }

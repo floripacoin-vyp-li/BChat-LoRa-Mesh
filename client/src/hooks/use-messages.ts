@@ -256,23 +256,6 @@ export function useClearMessages() {
   });
 }
 
-export function usePurgeRecentMessages() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/messages/recent", {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to purge recent messages");
-      return res.json() as Promise<{ deleted: number }>;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [api.messages.list.path] });
-    },
-  });
-}
-
 export function useClearLocalMessages() {
   const queryClient = useQueryClient();
   return {
