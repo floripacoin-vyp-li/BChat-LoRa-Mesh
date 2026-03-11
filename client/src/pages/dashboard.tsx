@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ShieldAlert, Signal, WifiOff, Bluetooth, Usb, Lock } from "lucide-react";
+import { ShieldAlert, ShieldCheck, Signal, WifiOff, Bluetooth, Usb } from "lucide-react";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ChatInput } from "@/components/chat-input";
 import { ChatMessage } from "@/components/chat-message";
@@ -160,11 +160,12 @@ export default function Dashboard() {
           {/* DM Button */}
           <button
             onClick={() => setDmPanelOpen(true)}
-            className="absolute top-10 right-3 z-10 flex items-center gap-1 bg-background/60 hover:bg-background/80 border border-white/10 rounded-lg px-2 py-1.5 transition-colors"
-            title="Secure private chats"
+            className="absolute top-10 right-3 z-10 flex items-center gap-1.5 bg-background/60 hover:bg-primary/10 border border-primary/20 hover:border-primary/50 rounded-lg px-2.5 py-2 transition-colors"
+            title="Secure Contacts"
             data-testid="button-open-dm-panel"
           >
-            <Lock size={12} className="text-primary" />
+            <ShieldCheck size={16} className="text-primary" />
+            <span className="text-[10px] font-mono text-primary hidden sm:inline">Secure</span>
             {totalUnread > 0 && (
               <span className="bg-primary text-primary-foreground text-[10px] font-mono px-1 rounded-full leading-none py-0.5" data-testid="badge-unread-dm">
                 {totalUnread}

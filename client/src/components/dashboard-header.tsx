@@ -1,4 +1,4 @@
-import { Activity, Bluetooth, Check, Clipboard, Cpu, Power, QrCode, ShieldCheck, Trash2, Usb } from "lucide-react";
+import { Activity, Bluetooth, Check, Clipboard, Cpu, Power, QrCode, Trash2, Usb } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import { useBLE } from "@/hooks/use-ble";
@@ -62,9 +62,8 @@ export function DashboardHeader({ ble, serial, isOnline }: DashboardHeaderProps)
       <div className="absolute inset-0 scanlines pointer-events-none opacity-20" />
 
       <div className="flex items-center gap-3 relative z-10">
-        <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-background border border-primary/20 flex items-center justify-center shadow-lg">
-          <ShieldCheck className="text-primary" size={28} />
-          <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-card to-background border border-white/10 flex items-center justify-center shadow-lg">
+          <Activity className="text-primary animate-pulse" size={20} />
         </div>
         <div>
           <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
