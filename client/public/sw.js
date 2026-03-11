@@ -1,4 +1,4 @@
-const CACHE_NAME = "bitchat-bridge-v2";
+const CACHE_NAME = "bitchat-bridge-v3";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

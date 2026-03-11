@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ShieldAlert, ShieldCheck, Signal, WifiOff, Bluetooth, Usb } from "lucide-react";
+import { Lock, ShieldAlert, ShieldCheck, Signal, WifiOff, Bluetooth, Usb } from "lucide-react";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ChatInput } from "@/components/chat-input";
 import { ChatMessage } from "@/components/chat-message";
