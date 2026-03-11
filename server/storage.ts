@@ -13,6 +13,7 @@ export interface IStorage {
   createMessage(message: InsertMessage): Promise<Message>;
   clearMessages(): Promise<void>;
   deleteMessagesOlderThan(hours: number): Promise<number>;
+  deleteMessageById(id: number, alias: string): Promise<boolean>;
   getPendingMessages(afterId: number): Promise<Message[]>;
   markTransmitted(id: number): Promise<void>;
   claimMessage(id: number, operatorId: string): Promise<boolean>;
@@ -52,6 +53,14 @@ export class DatabaseStorage implements IStorage {
       .where(lt(messages.timestamp, cutoff))
       .returning({ id: messages.id });
     return result.length;
+  }
+
+  async deleteMessageById(id: number, alias: string): Promise<boolean> {
+    const result = await db
+      .delete(messages)
+      .where(and(eq(messages.id, id), eq(messages.sender, alias)))
+      .returning({ id: messages.id });
+    return result.length > 0;
   }
 
   async getPendingMessages(afterId: number): Promise<Message[]> {

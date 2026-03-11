@@ -1,14 +1,15 @@
 import { format } from "date-fns";
 import { motion } from "framer-motion";
-import { RadioTower, User, Cpu } from "lucide-react";
+import { RadioTower, User, Cpu, Trash2 } from "lucide-react";
 import type { Message } from "@shared/schema";
 
 interface ChatMessageProps {
   message: Message;
   myAlias: string;
+  onDelete?: (id: number) => void;
 }
 
-export function ChatMessage({ message, myAlias }: ChatMessageProps) {
+export function ChatMessage({ message, myAlias, onDelete }: ChatMessageProps) {
   const isSystem = message.sender === "system";
   const isUser = message.sender === myAlias || message.sender === "user";
 
@@ -38,6 +39,16 @@ export function ChatMessage({ message, myAlias }: ChatMessageProps) {
           <span className="text-[10px] font-mono text-muted-foreground/50">
             {message.timestamp ? format(new Date(message.timestamp), "HH:mm:ss") : "--:--:--"}
           </span>
+          {isUser && onDelete && message.id > 0 && (
+            <button
+              onClick={() => onDelete(message.id)}
+              className="text-primary-foreground/30 hover:text-destructive transition-colors p-0.5 rounded"
+              title="Delete message"
+              data-testid={`button-delete-msg-${message.id}`}
+            >
+              <Trash2 size={10} />
+            </button>
+          )}
         </div>
 
         <div className={`

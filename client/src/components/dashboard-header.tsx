@@ -1,9 +1,8 @@
-import { Activity, Bluetooth, Check, Clipboard, Cpu, LogOut, Power, QrCode, ShieldCheck, Trash2, Usb } from "lucide-react";
+import { Activity, Bluetooth, Check, Clipboard, Cpu, LogOut, Power, QrCode, ShieldCheck, Usb } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import { useBLE } from "@/hooks/use-ble";
 import { useSerial } from "@/hooks/use-serial";
-import { useClearLocalMessages } from "@/hooks/use-messages";
 import { QRCodeDisplay } from "@/components/qr-code";
 import {
   AlertDialog,
@@ -35,7 +34,6 @@ interface DashboardHeaderProps {
 const serialSupported = typeof navigator !== "undefined" && "serial" in navigator;
 
 export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, totalUnread }: DashboardHeaderProps) {
-  const { clear: clearLocalMessages } = useClearLocalMessages();
   const anyConnected = ble.isConnected || serial.isConnected;
   const anyConnecting = ble.isConnecting || serial.isConnecting;
   const [qrOpen, setQrOpen] = useState(false);
@@ -185,36 +183,6 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, 
             )}
           </DialogContent>
         </Dialog>
-
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <button
-              className="px-3 py-2 rounded-lg border border-destructive/20 text-destructive/80 hover:bg-destructive/10 hover:text-destructive flex items-center gap-2 text-xs font-mono transition-colors"
-              title="Clear Local Log"
-              data-testid="button-clear-log"
-            >
-              <Trash2 size={14} />
-              <span className="hidden sm:inline">Clear Log</span>
-            </button>
-          </AlertDialogTrigger>
-          <AlertDialogContent className="bg-card border-border/50 font-mono">
-            <AlertDialogHeader>
-              <AlertDialogTitle>Clear your local view?</AlertDialogTitle>
-              <AlertDialogDescription className="text-muted-foreground">
-                This clears the message log from your screen only. Other users are not affected and the channel history is preserved.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel className="bg-secondary text-secondary-foreground border-white/10 hover:bg-white/5">Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => clearLocalMessages()}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                Clear My View
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
 
         <button
           onClick={onOpenDm}

@@ -264,3 +264,23 @@ export function useClearLocalMessages() {
     },
   };
 }
+
+export function useDeleteMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, alias }: { id: number; alias: string }) => {
+      const res = await fetch(`/api/messages/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ alias }),
+      });
+      if (!res.ok) throw new Error("Failed to delete message");
+    },
+    onSuccess: (_, { id }) => {
+      queryClient.setQueryData<Message[]>([api.messages.list.path], (prev) =>
+        prev ? prev.filter((m) => m.id !== id) : []
+      );
+    },
+  });
+}

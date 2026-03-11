@@ -6,7 +6,7 @@ import { ChatMessage } from "@/components/chat-message";
 
 import { ContactsPanel } from "@/components/contacts-panel";
 import { PrivateChat } from "@/components/private-chat";
-import { useMessages } from "@/hooks/use-messages";
+import { useMessages, useDeleteMessage } from "@/hooks/use-messages";
 import { useBLE } from "@/hooks/use-ble";
 import { useSerial } from "@/hooks/use-serial";
 import { useAlias } from "@/hooks/use-alias";
@@ -21,6 +21,7 @@ import { parseDmPayload } from "@/lib/crypto";
 
 export default function Dashboard() {
   const { data: messages, isLoading, refetch } = useMessages();
+  const { mutate: deleteMessage } = useDeleteMessage();
   const ble = useBLE();
   const serial = useSerial();
   const { alias, claimAlias, isReady } = useAlias();
@@ -196,7 +197,7 @@ export default function Dashboard() {
                       </div>
                     );
                   }
-                  return <ChatMessage key={msg.id} message={msg} myAlias={alias} />;
+                  return <ChatMessage key={msg.id} message={msg} myAlias={alias} onDelete={(id) => deleteMessage({ id, alias })} />;
                 })}
               </div>
             )}

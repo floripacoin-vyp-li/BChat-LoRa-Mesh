@@ -33,6 +33,16 @@ export function useMessageStream() {
       console.log("[SSE] Log cleared by server broadcast");
     });
 
+    // message-deleted event: one message was deleted by its owner
+    es.addEventListener("message-deleted", (event) => {
+      try {
+        const { id } = JSON.parse((event as MessageEvent).data);
+        queryClient.setQueryData<Message[]>([api.messages.list.path], (prev) =>
+          prev ? prev.filter((m) => m.id !== id) : []
+        );
+      } catch (_) {}
+    });
+
     // Operator presence event — a gateway came online or went offline
     es.addEventListener("operator-status", (event) => {
       try {

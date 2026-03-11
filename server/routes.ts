@@ -27,6 +27,10 @@ function broadcastClear(): void {
   broadcastRaw(`event: clear\ndata: {}\n\n`);
 }
 
+function broadcastMessageDeleted(id: number): void {
+  broadcastRaw(`event: message-deleted\ndata: ${JSON.stringify({ id })}\n\n`);
+}
+
 function broadcastOperatorCount(): void {
   broadcastRaw(`event: operator-status\ndata: ${JSON.stringify({ count: activeOperators.size })}\n\n`);
 }
@@ -116,6 +120,22 @@ export async function registerRoutes(
   };
   runAutoPurge();
   setInterval(runAutoPurge, 15 * 60 * 1000);
+
+  // ── Delete own message ────────────────────────────────────────────────────
+  app.delete("/api/messages/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+      const { alias } = z.object({ alias: z.string().min(1) }).parse(req.body);
+      const deleted = await storage.deleteMessageById(id, alias);
+      if (!deleted) return res.status(403).json({ message: "Not authorized or message not found" });
+      broadcastMessageDeleted(id);
+      res.status(204).end();
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      res.status(500).json({ message: "Failed to delete message" });
+    }
+  });
 
   // ── Clear messages ────────────────────────────────────────────────────────
   app.delete(api.messages.clear.path, async (req, res) => {
