@@ -109,17 +109,22 @@ export function useBLE() {
         return;
       }
 
-      const toRadioChar   = await service.getCharacteristic(TORADIO_UUID);
-      const fromRadioChar = await service.getCharacteristic(FROMRADIO_UUID);
-      const fromNumChar   = await service.getCharacteristic(FROMNUM_UUID);
+      // ── TORADIO is the only mandatory characteristic — without it TX is impossible ──
+      const toRadioChar = await service.getCharacteristic(TORADIO_UUID);
 
-      cachedFromNumChar = fromNumChar;
+      // Assign send function immediately using writeValueWithoutResponse (Android-compatible)
+      // with graceful fallback to the deprecated writeValue for older browsers.
       (window as any).meshtasticDevice = device;
       (window as any)._meshtasticTransport = "ble";
-      (window as any).meshtasticSend = async (bytes: Uint8Array) => toRadioChar.writeValue(bytes);
+      (window as any).meshtasticSend = async (bytes: Uint8Array) => {
+        if (typeof toRadioChar.writeValueWithoutResponse === "function") {
+          return toRadioChar.writeValueWithoutResponse(bytes);
+        }
+        return toRadioChar.writeValue(bytes);
+      };
       window.dispatchEvent(new CustomEvent("meshtastic-ready", { detail: true }));
 
-      // Mark connected immediately — handshake failures below are non-fatal
+      // Mark connected immediately — RX characteristic failures below are non-fatal
       setState({
         isConnected: true,
         deviceName: device.name || "Meshtastic Node",
@@ -128,31 +133,63 @@ export function useBLE() {
 
       toast({ title: "BLE Connected", description: `Bridged to ${device.name || "Meshtastic Node"}.` });
 
+      // ── FROMRADIO: optional — needed for reception; TX works without it ──────
+      let fromRadioChar: BluetoothRemoteGATTCharacteristic | null = null;
+      try {
+        fromRadioChar = await service.getCharacteristic(FROMRADIO_UUID);
+        console.log("BLE: FROMRADIO characteristic found");
+      } catch (e) {
+        console.warn("BLE: FROMRADIO not found — RX unavailable, TX still works:", e);
+      }
+
+      // ── FROMNUM: optional — only useful if FROMRADIO also succeeded ──────────
+      let fromNumChar: BluetoothRemoteGATTCharacteristic | null = null;
+      if (fromRadioChar) {
+        try {
+          fromNumChar = await service.getCharacteristic(FROMNUM_UUID);
+          cachedFromNumChar = fromNumChar;
+          console.log("BLE: FROMNUM characteristic found");
+        } catch (e) {
+          console.warn("BLE: FROMNUM not found — notifications unavailable, poll only:", e);
+        }
+      }
+
       // ── Phase 2: Handshake & notification setup (non-fatal) ─────────────────
-      try {
-        console.log("BLE: Sending wantConfigId handshake...");
-        await toRadioChar.writeValue(buildWantConfig());
+      if (fromRadioChar) {
+        try {
+          console.log("BLE: Sending wantConfigId handshake...");
+          await (async () => {
+            if (typeof toRadioChar.writeValueWithoutResponse === "function") {
+              return toRadioChar.writeValueWithoutResponse(buildWantConfig());
+            }
+            return toRadioChar.writeValue(buildWantConfig());
+          })();
 
-        console.log("BLE: Initial fromRadio drain...");
-        await readAllFromRadio(fromRadioChar);
-      } catch (e) {
-        console.warn("BLE: Initial handshake failed — radio still usable for TX:", e);
-      }
-
-      try {
-        await fromNumChar.startNotifications();
-        fromNumHandler = async () => {
-          console.log("BLE: fromNum notify fired");
+          console.log("BLE: Initial fromRadio drain...");
           await readAllFromRadio(fromRadioChar);
-        };
-        fromNumChar.addEventListener("characteristicvaluechanged", fromNumHandler);
-        console.log("BLE: fromNum notifications active");
-      } catch (e) {
-        console.warn("BLE: fromNum startNotifications failed, relying on poll only:", e);
-      }
+        } catch (e) {
+          console.warn("BLE: Initial handshake failed — radio still usable for TX:", e);
+        }
 
-      const pollInterval = setInterval(() => readAllFromRadio(fromRadioChar), 3000);
-      (window as any)._bleFromRadioPoll = pollInterval;
+        if (fromNumChar) {
+          try {
+            await fromNumChar.startNotifications();
+            fromNumHandler = async () => {
+              console.log("BLE: fromNum notify fired");
+              if (fromRadioChar) await readAllFromRadio(fromRadioChar);
+            };
+            fromNumChar.addEventListener("characteristicvaluechanged", fromNumHandler);
+            console.log("BLE: fromNum notifications active");
+          } catch (e) {
+            console.warn("BLE: fromNum startNotifications failed, relying on poll only:", e);
+          }
+        }
+
+        const pollInterval = setInterval(() => fromRadioChar && readAllFromRadio(fromRadioChar), 3000);
+        (window as any)._bleFromRadioPoll = pollInterval;
+      } else {
+        console.warn("BLE: RX unavailable — TX only mode");
+      }
 
       postSystemMessage(`UPLINK ESTABLISHED: Bridged to ${device.name || "Meshtastic Node"} via BLE. LoRa terminal active.`);
 

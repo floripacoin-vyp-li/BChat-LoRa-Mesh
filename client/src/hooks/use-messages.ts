@@ -43,7 +43,7 @@ export function useSendMessage() {
         try {
           const bytes = buildTextToRadio(validated.content);
           const writeTimeout = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("BLE write timed out after 5s")), 5000)
+            setTimeout(() => reject(new Error("BLE write timed out after 10s")), 10000)
           );
           await Promise.race([(window as any).meshtasticSend(bytes), writeTimeout]);
           transmitted = true;
@@ -159,7 +159,7 @@ export function useSendPrivateMessage(
           const { buildTextToRadio } = await import("@/lib/meshtastic");
           const bytes = buildTextToRadio(dmContent);
           const writeTimeout = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("BLE write timed out after 5s")), 5000)
+            setTimeout(() => reject(new Error("BLE write timed out after 10s")), 10000)
           );
           await Promise.race([(window as any).meshtasticSend(bytes), writeTimeout]);
           transmitted = true;

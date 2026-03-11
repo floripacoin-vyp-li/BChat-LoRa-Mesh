@@ -27,11 +27,12 @@ interface DashboardHeaderProps {
   ble: ReturnType<typeof useBLE>;
   serial: ReturnType<typeof useSerial>;
   isOnline: boolean;
+  isConnected: boolean;
 }
 
 const serialSupported = typeof navigator !== "undefined" && "serial" in navigator;
 
-export function DashboardHeader({ ble, serial, isOnline }: DashboardHeaderProps) {
+export function DashboardHeader({ ble, serial, isOnline, isConnected }: DashboardHeaderProps) {
   const { mutate: clearMessages, isPending: isClearing } = useClearMessages();
   const anyConnected = ble.isConnected || serial.isConnected;
   const anyConnecting = ble.isConnecting || serial.isConnecting;
@@ -71,7 +72,9 @@ export function DashboardHeader({ ble, serial, isOnline }: DashboardHeaderProps)
             <span className={`font-mono text-xs px-2 py-0.5 rounded-full border transition-colors duration-500 ${
               isOnline
                 ? "text-green-400 bg-green-400/10 border-green-400/30"
-                : "text-red-400 bg-red-400/10 border-red-400/30"
+                : isConnected
+                  ? "text-yellow-400 bg-yellow-400/10 border-yellow-400/30"
+                  : "text-red-400 bg-red-400/10 border-red-400/30"
             }`}>
               BRIDGE
             </span>
