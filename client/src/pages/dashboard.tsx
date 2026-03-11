@@ -165,7 +165,7 @@ export default function Dashboard() {
             data-testid="button-open-dm-panel"
           >
             <ShieldCheck size={16} className="text-primary" />
-            <span className="text-[10px] font-mono text-primary hidden sm:inline">Secure</span>
+            <span className="text-[10px] font-mono text-primary">Secure</span>
             {totalUnread > 0 && (
               <span className="bg-primary text-primary-foreground text-[10px] font-mono px-1 rounded-full leading-none py-0.5" data-testid="badge-unread-dm">
                 {totalUnread}

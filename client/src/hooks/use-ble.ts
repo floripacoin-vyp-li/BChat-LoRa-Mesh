@@ -110,7 +110,20 @@ export function useBLE() {
       }
 
       // ── TORADIO is the only mandatory characteristic — without it TX is impossible ──
-      const toRadioChar = await service.getCharacteristic(TORADIO_UUID);
+      // Android's GATT stack often fails characteristic discovery on the first attempt;
+      // retry up to 3 times with a short delay before giving up.
+      let toRadioChar: BluetoothRemoteGATTCharacteristic | null = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          toRadioChar = await service.getCharacteristic(TORADIO_UUID);
+          break;
+        } catch (e) {
+          if (attempt === 3) throw e;
+          console.warn(`BLE: TORADIO discovery attempt ${attempt} failed — retrying...`);
+          await new Promise((r) => setTimeout(r, 600));
+        }
+      }
+      if (!toRadioChar) throw new Error("TORADIO characteristic not found after retries");
 
       // Assign send function immediately using writeValueWithoutResponse (Android-compatible)
       // with graceful fallback to the deprecated writeValue for older browsers.

@@ -117,7 +117,13 @@ export function ChatInput({ isConnected, isOnline, isMeshtasticReady, alias, onA
           type="text"
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          placeholder={!isConnected && !isOnline && !isMeshtasticReady ? "Connect BLE radio to transmit..." : "Transmit message..."}
+          placeholder={
+            !isConnected && !isOnline && !isMeshtasticReady
+              ? "Connect BLE radio to transmit..."
+              : !isOnline && isMeshtasticReady
+              ? "BLE only — transmitting direct to radio..."
+              : "Transmit message..."
+          }
           disabled={isPending || editingAlias || (!isConnected && !isOnline && !isMeshtasticReady)}
           className="flex-1 bg-transparent border-none px-2 py-4 text-sm focus:outline-none focus:ring-0 disabled:opacity-50 text-foreground placeholder:text-muted-foreground/50 font-mono"
           data-testid="input-message"
