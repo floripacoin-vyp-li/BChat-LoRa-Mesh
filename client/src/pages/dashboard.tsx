@@ -80,7 +80,7 @@ export default function Dashboard() {
       />
 
       <div className="w-full max-w-4xl h-[85vh] flex flex-col relative z-10">
-        <DashboardHeader ble={ble} serial={serial} />
+        <DashboardHeader ble={ble} serial={serial} isOnline={isOnline} />
 
         <div className="flex-1 glass-panel border-y-0 relative flex flex-col overflow-hidden bg-card/60">
           {/* Connection Status Banner */}

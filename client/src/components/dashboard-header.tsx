@@ -1,4 +1,4 @@
-import { Activity, Bluetooth, Check, Clipboard, Cpu, Power, QrCode, Trash2, Usb } from "lucide-react";
+import { Activity, Bluetooth, Check, Clipboard, Cpu, Power, QrCode, ShieldCheck, Trash2, Usb } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import { useBLE } from "@/hooks/use-ble";
@@ -26,11 +26,12 @@ import {
 interface DashboardHeaderProps {
   ble: ReturnType<typeof useBLE>;
   serial: ReturnType<typeof useSerial>;
+  isOnline: boolean;
 }
 
 const serialSupported = typeof navigator !== "undefined" && "serial" in navigator;
 
-export function DashboardHeader({ ble, serial }: DashboardHeaderProps) {
+export function DashboardHeader({ ble, serial, isOnline }: DashboardHeaderProps) {
   const { mutate: clearMessages, isPending: isClearing } = useClearMessages();
   const anyConnected = ble.isConnected || serial.isConnected;
   const anyConnecting = ble.isConnecting || serial.isConnecting;
@@ -61,13 +62,18 @@ export function DashboardHeader({ ble, serial }: DashboardHeaderProps) {
       <div className="absolute inset-0 scanlines pointer-events-none opacity-20" />
 
       <div className="flex items-center gap-3 relative z-10">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-card to-background border border-white/10 flex items-center justify-center shadow-lg">
-          <Activity className="text-primary animate-pulse" size={20} />
+        <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-background border border-primary/20 flex items-center justify-center shadow-lg">
+          <ShieldCheck className="text-primary" size={28} />
+          <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
         </div>
         <div>
-          <h1 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+          <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
             Bit Chat{" "}
-            <span className="font-mono text-xs px-2 py-0.5 rounded-full border text-primary bg-primary/10 border-primary/20">
+            <span className={`font-mono text-xs px-2 py-0.5 rounded-full border transition-colors duration-500 ${
+              isOnline
+                ? "text-green-400 bg-green-400/10 border-green-400/30"
+                : "text-red-400 bg-red-400/10 border-red-400/30"
+            }`}>
               BRIDGE
             </span>
           </h1>
