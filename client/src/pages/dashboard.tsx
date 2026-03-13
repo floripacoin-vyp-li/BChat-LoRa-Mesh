@@ -239,7 +239,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        <ChatInput isConnected={isConnected} isOnline={isOnline} isMeshtasticReady={isMeshtasticReady} isReconnecting={isReconnecting} alias={alias} onAliasChange={claimAlias} />
+        <ChatInput alias={alias} onAliasChange={claimAlias} />
       </div>}
     </div>
   );
