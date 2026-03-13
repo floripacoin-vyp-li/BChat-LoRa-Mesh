@@ -28,6 +28,7 @@ export default function Dashboard() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const isConnected = ble.isConnected || serial.isConnected;
+  const isReconnecting = ble.isReconnecting;
   const isOnline = useConnectivity();
   const { gatewayOnline } = useGatewayPresence();
   const isMeshtasticReady = useMeshtasticReady();
@@ -90,7 +91,15 @@ export default function Dashboard() {
             let colorClass = "";
             let content = null as React.ReactNode;
 
-            if (!isOnline && isConnected) {
+            if (isReconnecting) {
+              colorClass = "bg-yellow-400/10 text-yellow-400 border-yellow-400/20";
+              content = (
+                <>
+                  <Bluetooth size={12} className="animate-pulse" />
+                  <span>Reconnecting…</span>
+                </>
+              );
+            } else if (!isOnline && isConnected) {
               // Offline but has local radio — can still transmit via BLE
               colorClass = "bg-yellow-400/10 text-yellow-400 border-yellow-400/20";
               content = (
@@ -230,7 +239,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        <ChatInput isConnected={isConnected} isOnline={isOnline} isMeshtasticReady={isMeshtasticReady} alias={alias} onAliasChange={claimAlias} />
+        <ChatInput isConnected={isConnected} isOnline={isOnline} isMeshtasticReady={isMeshtasticReady} isReconnecting={isReconnecting} alias={alias} onAliasChange={claimAlias} />
       </div>}
     </div>
   );

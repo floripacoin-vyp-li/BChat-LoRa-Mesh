@@ -7,11 +7,12 @@ interface ChatInputProps {
   isConnected: boolean;
   isOnline: boolean;
   isMeshtasticReady: boolean;
+  isReconnecting: boolean;
   alias: string;
   onAliasChange: (newAlias: string) => Promise<"ok" | "taken">;
 }
 
-export function ChatInput({ isConnected, isOnline, isMeshtasticReady, alias, onAliasChange }: ChatInputProps) {
+export function ChatInput({ isConnected, isOnline, isMeshtasticReady, isReconnecting, alias, onAliasChange }: ChatInputProps) {
   const [content, setContent] = useState("");
   const [editingAlias, setEditingAlias] = useState(false);
   const [aliasInput, setAliasInput] = useState(alias);
@@ -150,13 +151,15 @@ export function ChatInput({ isConnected, isOnline, isMeshtasticReady, alias, onA
           value={content}
           onChange={(e) => setContent(e.target.value)}
           placeholder={
-            !isConnected && !isOnline && !isMeshtasticReady
+            isReconnecting
+              ? "Reconnecting to radio…"
+              : !isConnected && !isOnline && !isMeshtasticReady
               ? "Connect BLE radio to transmit..."
               : !isOnline && isMeshtasticReady
               ? "BLE only — transmitting direct to radio..."
               : "Transmit message..."
           }
-          disabled={isPending || editingAlias || (!isConnected && !isOnline && !isMeshtasticReady)}
+          disabled={isPending || editingAlias || isReconnecting || (!isConnected && !isOnline && !isMeshtasticReady)}
           className="flex-1 bg-transparent border-none px-2 py-4 text-sm focus:outline-none focus:ring-0 disabled:opacity-50 text-foreground placeholder:text-muted-foreground/75 font-mono"
           data-testid="input-message"
         />
@@ -164,8 +167,8 @@ export function ChatInput({ isConnected, isOnline, isMeshtasticReady, alias, onA
         <div className="pr-2">
           <button
             type="submit"
-            disabled={!content.trim() || isPending || (!isConnected && !isOnline && !isMeshtasticReady)}
-            title={!isConnected && !isOnline && !isMeshtasticReady ? "Connect a BLE radio to transmit offline" : undefined}
+            disabled={!content.trim() || isPending || isReconnecting || (!isConnected && !isOnline && !isMeshtasticReady)}
+            title={!isConnected && !isOnline && !isMeshtasticReady && !isReconnecting ? "Connect a BLE radio to transmit offline" : undefined}
             className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground disabled:opacity-30 disabled:hover:bg-primary/10 disabled:hover:text-primary transition-all duration-200"
             data-testid="button-send"
           >

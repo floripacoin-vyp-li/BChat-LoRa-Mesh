@@ -36,6 +36,7 @@ const serialSupported = typeof navigator !== "undefined" && "serial" in navigato
 export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, totalUnread }: DashboardHeaderProps) {
   const anyConnected = ble.isConnected || serial.isConnected;
   const anyConnecting = ble.isConnecting || serial.isConnecting;
+  const anyReconnecting = ble.isReconnecting;
   const [qrOpen, setQrOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [localUrl, setLocalUrl] = useState<string | null>(null);
@@ -242,7 +243,16 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, 
 
         <div className="h-6 w-px bg-white/10 mx-1 hidden sm:block" />
 
-        {anyConnected ? (
+        {anyReconnecting ? (
+          <button
+            disabled
+            className="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-yellow-400/10 border border-yellow-400/20 text-yellow-400 flex items-center justify-center gap-2 text-sm font-medium transition-all cursor-wait"
+            data-testid="button-reconnecting"
+          >
+            <Bluetooth size={15} className="animate-pulse" />
+            <span>Reconnecting…</span>
+          </button>
+        ) : anyConnected ? (
           <button
             onClick={ble.isConnected ? ble.disconnect : serial.disconnect}
             className="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-secondary border border-white/10 hover:bg-destructive/20 hover:border-destructive/50 hover:text-destructive text-foreground flex items-center justify-center gap-2 text-sm font-medium transition-all group"
