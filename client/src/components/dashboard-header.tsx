@@ -259,7 +259,7 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, 
             <button
               onClick={ble.connect}
               disabled={anyConnecting}
-              className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 flex items-center justify-center gap-2 text-sm font-semibold tech-glow-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-secondary border border-white/10 hover:bg-primary/10 hover:border-primary/30 hover:text-primary text-foreground flex items-center justify-center gap-2 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               data-testid="button-connect-ble"
             >
               <Bluetooth size={15} className={ble.isConnecting ? "animate-pulse" : ""} />
