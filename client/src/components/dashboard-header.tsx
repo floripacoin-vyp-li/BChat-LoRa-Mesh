@@ -80,7 +80,7 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, 
             </span>
           </h1>
           <p className="text-xs text-muted-foreground font-mono">
-            LoRa Protocol
+            WiFi-Bluetooth-LoRa Mesh
           </p>
         </div>
       </div>
