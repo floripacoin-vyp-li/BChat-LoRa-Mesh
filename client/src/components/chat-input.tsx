@@ -127,7 +127,7 @@ export function ChatInput({ isConnected, isOnline, isMeshtasticReady, alias, onA
               data-testid="button-edit-alias"
             >
               <span className="text-xs font-mono text-primary tracking-wide">{alias}</span>
-              <Pencil size={10} className="text-muted-foreground/40 group-hover:text-primary/60 transition-colors" />
+              <Pencil size={14} className="text-muted-foreground/40 group-hover:text-primary/60 transition-colors" />
             </button>
           )}
         </div>
