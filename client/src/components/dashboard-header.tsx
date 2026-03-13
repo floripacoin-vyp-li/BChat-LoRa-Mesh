@@ -192,7 +192,7 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, 
           data-testid="button-open-dm-panel"
         >
           <ShieldCheck size={14} />
-          <span className="hidden sm:inline">Secure</span>
+          <span>Secure</span>
           {totalUnread > 0 && (
             <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[9px] font-mono px-1 rounded-full leading-none py-0.5 min-w-[16px] text-center" data-testid="badge-unread-dm">
               {totalUnread}
