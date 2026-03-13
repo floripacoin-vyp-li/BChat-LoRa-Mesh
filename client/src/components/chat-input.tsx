@@ -157,7 +157,7 @@ export function ChatInput({ isConnected, isOnline, isMeshtasticReady, alias, onA
               : "Transmit message..."
           }
           disabled={isPending || editingAlias || (!isConnected && !isOnline && !isMeshtasticReady)}
-          className="flex-1 bg-transparent border-none px-2 py-4 text-sm focus:outline-none focus:ring-0 disabled:opacity-50 text-foreground placeholder:text-muted-foreground/50 font-mono"
+          className="flex-1 bg-transparent border-none px-2 py-4 text-sm focus:outline-none focus:ring-0 disabled:opacity-50 text-foreground placeholder:text-muted-foreground/75 font-mono"
           data-testid="input-message"
         />
 
