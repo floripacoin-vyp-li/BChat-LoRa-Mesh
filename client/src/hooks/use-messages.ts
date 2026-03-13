@@ -24,7 +24,6 @@ export function useMessages() {
       const data = await res.json();
       return parseWithLogging(api.messages.list.responses[200], data, "messages.list");
     },
-    // SSE handles real-time updates; skip polling when server is unreachable
     refetchInterval: () => serverReachable ? 10000 : false,
   });
 }
@@ -34,41 +33,26 @@ export function useSendMessage() {
   return useMutation({
     mutationFn: async (message: MessageInput) => {
       const validated = api.messages.create.input.parse(message);
-
-      // If this browser has a radio connected, transmit immediately and mark
-      // as transmitted so the relay loop does not double-send it.
-      let transmitted = false;
       const isUserMessage = validated.sender !== "system" && validated.sender !== "node";
-      if (isUserMessage && (window as any).meshtasticSend) {
-        try {
-          const bytes = buildTextToRadio(`${validated.sender}: ${validated.content}`);
-          const writeTimeout = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("BLE write timed out after 10s")), 10000)
-          );
-          await Promise.race([(window as any).meshtasticSend(bytes), writeTimeout]);
-          transmitted = true;
-          console.log("Mesh: Transmitted via", (window as any)._meshtasticTransport, ":", validated.content);
-        } catch (err) {
-          console.error("Mesh: Transmission failed:", err);
-        }
+
+      // Fire-and-forget BLE/Serial write — never awaited so it never locks the UI
+      const hasRadio = isUserMessage && !!(window as any).meshtasticSend;
+      if (hasRadio) {
+        const bytes = buildTextToRadio(`${validated.sender}: ${validated.content}`);
+        Promise.resolve((window as any).meshtasticSend(bytes)).catch((e: unknown) =>
+          console.warn("Mesh: radio write failed:", e)
+        );
+        console.log("Mesh: dispatched via", (window as any)._meshtasticTransport);
       }
 
-      // When offline: skip server POST, inject into local cache, still transmitted via radio if available
+      // Offline: store locally and return immediately
       if (!serverReachable) {
-        if (!transmitted) {
-          throw new Error(
-            (window as any).meshtasticSend
-              ? "BLE transmission failed — check radio connection"
-              : "No radio connected — connect via BLE to transmit offline"
-          );
-        }
-        console.log("Mesh: Offline — storing outgoing message locally");
         const localMsg: Message = {
           id: Date.now(),
           sender: validated.sender,
           content: validated.content,
           timestamp: new Date(),
-          transmitted,
+          transmitted: hasRadio,
           claimedBy: null,
           loraPacketId: null,
         };
@@ -80,17 +64,14 @@ export function useSendMessage() {
         return localMsg;
       }
 
+      // Online: POST to server
       try {
-        const controller = new AbortController();
-        const sendTimeout = setTimeout(() => controller.abort(), 5000);
         const res = await fetch(api.messages.create.path, {
           method: api.messages.create.method,
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...validated, transmitted }),
+          body: JSON.stringify({ ...validated, transmitted: hasRadio }),
           credentials: "include",
-          signal: controller.signal,
         });
-        clearTimeout(sendTimeout);
 
         if (!res.ok) {
           if (res.status === 400) {
@@ -103,31 +84,24 @@ export function useSendMessage() {
         const data = await res.json();
         return parseWithLogging(api.messages.create.responses[201], data, "messages.create");
       } catch (fetchErr) {
-        // Server unreachable — kick off a connectivity recheck so the UI updates fast
         recheckConnectivity().catch(() => {});
-
-        if (transmitted) {
-          // Message already went over the radio — store locally and succeed silently
-          console.log("Mesh: Server unreachable but message was transmitted via radio — caching locally");
-          const localMsg: Message = {
-            id: Date.now(),
-            sender: validated.sender,
-            content: validated.content,
-            timestamp: new Date(),
-            transmitted: true,
-            claimedBy: null,
-            loraPacketId: null,
-          };
-          queryClient.setQueryData<Message[]>([api.messages.list.path], (prev) => {
-            if (!prev) return [localMsg];
-            if (prev.some((m) => m.id === localMsg.id)) return prev;
-            return [...prev, localMsg];
-          });
-          return localMsg;
-        }
-
-        // Not transmitted and server is gone — fail loudly
-        throw fetchErr;
+        // Server became unreachable mid-request — store locally
+        console.log("Mesh: server unreachable mid-send — caching locally");
+        const localMsg: Message = {
+          id: Date.now(),
+          sender: validated.sender,
+          content: validated.content,
+          timestamp: new Date(),
+          transmitted: hasRadio,
+          claimedBy: null,
+          loraPacketId: null,
+        };
+        queryClient.setQueryData<Message[]>([api.messages.list.path], (prev) => {
+          if (!prev) return [localMsg];
+          if (prev.some((m) => m.id === localMsg.id)) return prev;
+          return [...prev, localMsg];
+        });
+        return localMsg;
       }
     },
     onSuccess: () => {
@@ -156,37 +130,24 @@ export function useSendPrivateMessage(
       const encrypted = await encrypt(sharedKey, content);
       const dmContent = formatDmPayload(myAlias, encrypted);
 
-      // Transmit over radio if connected
-      let transmitted = false;
-      if ((window as any).meshtasticSend) {
-        try {
-          const { buildTextToRadio } = await import("@/lib/meshtastic");
-          const bytes = buildTextToRadio(dmContent);
-          const writeTimeout = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("BLE write timed out after 10s")), 10000)
-          );
-          await Promise.race([(window as any).meshtasticSend(bytes), writeTimeout]);
-          transmitted = true;
-        } catch (err) {
-          console.error("Mesh: DM transmission failed:", err);
-        }
+      // Fire-and-forget radio write
+      const hasRadio = !!(window as any).meshtasticSend;
+      if (hasRadio) {
+        const { buildTextToRadio: build } = await import("@/lib/meshtastic");
+        const bytes = build(dmContent);
+        Promise.resolve((window as any).meshtasticSend(bytes)).catch((e: unknown) =>
+          console.error("Mesh: DM radio write failed:", e)
+        );
       }
 
-      // Offline: store locally if transmitted via BLE, otherwise fail loudly
+      // Offline: store locally
       if (!serverReachable) {
-        if (!transmitted) {
-          throw new Error(
-            (window as any).meshtasticSend
-              ? "BLE transmission failed — check radio connection"
-              : "No radio connected — connect via BLE to transmit offline"
-          );
-        }
         const localMsg: Message = {
           id: Date.now(),
           sender: myAlias,
           content: dmContent,
           timestamp: new Date(),
-          transmitted,
+          transmitted: hasRadio,
           claimedBy: null,
           loraPacketId: null,
         };
@@ -198,11 +159,12 @@ export function useSendPrivateMessage(
         return localMsg;
       }
 
+      // Online: POST to server
       try {
         const res = await fetch(api.messages.create.path, {
           method: api.messages.create.method,
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sender: myAlias, content: dmContent, transmitted }),
+          body: JSON.stringify({ sender: myAlias, content: dmContent, transmitted: hasRadio }),
           credentials: "include",
         });
 
@@ -212,27 +174,21 @@ export function useSendPrivateMessage(
         return parseWithLogging(api.messages.create.responses[201], data, "messages.create.dm");
       } catch (fetchErr) {
         recheckConnectivity().catch(() => {});
-
-        if (transmitted) {
-          console.log("Mesh: Server unreachable but DM was transmitted via radio — caching locally");
-          const localMsg: Message = {
-            id: Date.now(),
-            sender: myAlias,
-            content: dmContent,
-            timestamp: new Date(),
-            transmitted: true,
-            claimedBy: null,
-            loraPacketId: null,
-          };
-          queryClient.setQueryData<Message[]>([api.messages.list.path], (prev) => {
-            if (!prev) return [localMsg];
-            if (prev.some((m) => m.id === localMsg.id)) return prev;
-            return [...prev, localMsg];
-          });
-          return localMsg;
-        }
-
-        throw fetchErr;
+        const localMsg: Message = {
+          id: Date.now(),
+          sender: myAlias,
+          content: dmContent,
+          timestamp: new Date(),
+          transmitted: hasRadio,
+          claimedBy: null,
+          loraPacketId: null,
+        };
+        queryClient.setQueryData<Message[]>([api.messages.list.path], (prev) => {
+          if (!prev) return [localMsg];
+          if (prev.some((m) => m.id === localMsg.id)) return prev;
+          return [...prev, localMsg];
+        });
+        return localMsg;
       }
     },
     onSuccess: () => {
