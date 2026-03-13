@@ -169,7 +169,7 @@ export function ChatInput({ isConnected, isOnline, isMeshtasticReady, alias, onA
             className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground disabled:opacity-30 disabled:hover:bg-primary/10 disabled:hover:text-primary transition-all duration-200"
             data-testid="button-send"
           >
-            <Send size={18} className={isPending ? "animate-pulse" : ""} />
+            <Send size={22} className={isPending ? "animate-pulse" : ""} />
           </button>
         </div>
       </form>
