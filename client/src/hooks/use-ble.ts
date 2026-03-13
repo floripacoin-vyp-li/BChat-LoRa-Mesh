@@ -204,37 +204,39 @@ async function attemptAutoReconnect(device: BluetoothDevice, deviceName: string)
   }
   reconnectInFlight = true;
 
-  for (let attempt = 1; attempt <= MAX_RECONNECT_ATTEMPTS; attempt++) {
-    console.log(`BLE: Auto-reconnect attempt ${attempt}/${MAX_RECONNECT_ATTEMPTS}...`);
-    try {
-      await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS));
+  try {
+    for (let attempt = 1; attempt <= MAX_RECONNECT_ATTEMPTS; attempt++) {
+      console.log(`BLE: Auto-reconnect attempt ${attempt}/${MAX_RECONNECT_ATTEMPTS}...`);
+      try {
+        await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS));
 
-      if (manualDisconnect) {
-        console.log("BLE: Manual disconnect detected during reconnect — aborting");
-        return false;
-      }
+        if (manualDisconnect) {
+          console.log("BLE: Manual disconnect detected during reconnect — aborting");
+          return false;
+        }
 
-      const success = await setupGattConnection(device);
-      if (success) {
-        console.log("BLE: Auto-reconnect succeeded");
-        reconnectInFlight = false;
-        latestSetState?.({
-          isConnected: true,
-          deviceName,
-          isConnecting: false,
-          isReconnecting: false,
-        });
-        installDisconnectHandler(device, deviceName);
-        return true;
+        const success = await setupGattConnection(device);
+        if (success) {
+          console.log("BLE: Auto-reconnect succeeded");
+          latestSetState?.({
+            isConnected: true,
+            deviceName,
+            isConnecting: false,
+            isReconnecting: false,
+          });
+          installDisconnectHandler(device, deviceName);
+          return true;
+        }
+      } catch (e) {
+        console.warn(`BLE: Auto-reconnect attempt ${attempt} failed:`, e);
       }
-    } catch (e) {
-      console.warn(`BLE: Auto-reconnect attempt ${attempt} failed:`, e);
     }
-  }
 
-  console.warn("BLE: Auto-reconnect exhausted — giving up");
-  reconnectInFlight = false;
-  return false;
+    console.warn("BLE: Auto-reconnect exhausted — giving up");
+    return false;
+  } finally {
+    reconnectInFlight = false;
+  }
 }
 
 export function useBLE() {
