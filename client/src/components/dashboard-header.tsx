@@ -80,7 +80,7 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, 
             </span>
           </h1>
           <p className="text-xs text-muted-foreground font-mono">
-            Meshtastic LoRa Protocol
+            LoRa Protocol
           </p>
         </div>
       </div>
