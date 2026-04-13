@@ -147,6 +147,25 @@ export async function clearBchAddress(): Promise<void> {
   }
 }
 
+export async function exportBchPrivKey(): Promise<string | null> {
+  try {
+    const raw = await loadRaw("bch-keys", "bch-privkey");
+    if (!raw) return null;
+    return Array.from(raw).map((b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    return null;
+  }
+}
+
+export async function importBchPrivKey(hex: string): Promise<void> {
+  const bytes = new Uint8Array(hex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)));
+  await storeRaw("bch-keys", "bch-privkey", bytes);
+  const pubKey = getPublicKey(bytes, true);
+  const address = publicKeyToLegacyAddress(pubKey);
+  localStorage.setItem(BCH_ADDR_CACHE_KEY, address);
+  _cachedAddress = address;
+}
+
 // ── BCH Address Validation ────────────────────────────────────────────────────
 
 const BASE58_CHARS = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";

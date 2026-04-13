@@ -5,6 +5,7 @@ import { QRCodeDisplay } from "@/components/qr-code";
 import { QRScanner, buildQRKeyPayload, type ScannedKey } from "@/components/qr-scanner";
 import type { Contact } from "@/hooks/use-contacts";
 import { exportKeyPair, importKeyPairFromBackup } from "@/lib/crypto";
+import { exportBchPrivKey, importBchPrivKey } from "@/lib/bch";
 import { apiRequest } from "@/lib/queryClient";
 
 interface ContactsPanelProps {
@@ -150,6 +151,7 @@ export function ContactsPanel({
     setBackupError(null);
     try {
       const keyPair = await exportKeyPair();
+      const bchPrivKey = await exportBchPrivKey();
       const alias = localStorage.getItem("bcb-alias") ?? "";
       const backup = {
         bcbVersion: 1,
@@ -163,6 +165,7 @@ export function ContactsPanel({
         activeCurrency: localStorage.getItem("bcb-payment-currency") ?? "bch",
         contacts: JSON.parse(localStorage.getItem("bcb-contacts") ?? "[]"),
         keyPair,
+        bchPrivKey,
       };
       const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
       const url  = URL.createObjectURL(blob);
@@ -194,6 +197,9 @@ export function ContactsPanel({
       if (Array.isArray(data.contacts))        localStorage.setItem("bcb-contacts",          JSON.stringify(data.contacts));
       if (data.keyPair?.privateKey && data.keyPair?.publicKey) {
         await importKeyPairFromBackup(data.keyPair.privateKey, data.keyPair.publicKey);
+      }
+      if (data.bchPrivKey && typeof data.bchPrivKey === "string") {
+        await importBchPrivKey(data.bchPrivKey);
       }
       setBackupState("success");
       setTimeout(() => window.location.reload(), 1500);
