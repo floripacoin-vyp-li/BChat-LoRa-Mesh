@@ -283,7 +283,7 @@ export function ChatInput({ alias, onAliasChange }: ChatInputProps) {
               <Crown size={9} className="text-amber-400 mt-0.5 shrink-0" />
               <p className="text-[10px] font-mono text-amber-300/70 leading-relaxed">
                 <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("bcb:open-premium"))} className="text-amber-400 underline underline-offset-2 hover:text-amber-300 transition-colors">Upgrade to Premium</button>
-                {" "}in the Contacts panel to use your email as alias instead.
+                {" "}in the Secure panel to use your email as alias instead.
               </p>
             </div>
           </div>
@@ -309,7 +309,7 @@ export function ChatInput({ alias, onAliasChange }: ChatInputProps) {
             <span className="text-[10px] font-mono text-amber-300/80 leading-relaxed">
               This email isn't a Premium account.{" "}
               <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("bcb:open-premium"))} className="text-amber-400 underline underline-offset-2 hover:text-amber-300 transition-colors">Upgrade to Premium</button>
-              {" "}in the Contacts panel to use your email as alias.
+              {" "}in the Secure panel to use your email as alias.
             </span>
           </div>
         ) : !showTakenOptions && aliasError && aliasError !== "email-not-premium" ? (

@@ -224,7 +224,7 @@ export function AliasDialog({ open, onConfirm, onSkip }: AliasDialogProps) {
                   <Crown size={11} className="text-amber-400 mt-0.5 shrink-0" />
                   <p className="text-[10px] font-mono text-amber-300/70 leading-relaxed">
                     <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("bcb:open-premium"))} className="text-amber-400 underline underline-offset-2 hover:text-amber-300 transition-colors">Upgrade to Premium</button>
-                    {" "}in the Contacts panel to use your email as alias instead.
+                    {" "}in the Secure panel to use your email as alias instead.
                   </p>
                 </div>
               </div>
@@ -241,7 +241,7 @@ export function AliasDialog({ open, onConfirm, onSkip }: AliasDialogProps) {
                       <p className="text-[11px] font-mono text-amber-300/70 leading-relaxed">
                         Email aliases are reserved for verified Premium members. Choose a regular handle now, then{" "}
                         <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("bcb:open-premium"))} className="text-amber-400 underline underline-offset-2 hover:text-amber-300 transition-colors">Upgrade to Premium</button>
-                        {" "}in the Contacts panel to use your email.
+                        {" "}in the Secure panel to use your email.
                       </p>
                     </div>
                   </div>
