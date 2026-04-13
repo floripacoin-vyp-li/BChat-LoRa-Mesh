@@ -429,7 +429,9 @@ export async function registerRoutes(
   app.get("/api/premium/status/:alias", async (req, res) => {
     try {
       const { alias } = req.params;
-      const record = await storage.getPremiumByAlias(alias);
+      const decoded = decodeURIComponent(alias);
+      let record = await storage.getPremiumByAlias(decoded);
+      if (!record) record = await storage.getPremiumByEmail(decoded);
       if (!record || record.status !== "active" || new Date(record.expiresAt) < new Date()) {
         return res.json({ isPremium: false });
       }
