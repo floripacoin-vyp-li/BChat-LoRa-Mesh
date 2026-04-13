@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Shield, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, LogOut, RefreshCw } from "lucide-react";
-import type { PremiumUser } from "@shared/schema";
+import { Shield, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, LogOut, RefreshCw, Settings, Save, Loader2, Zap, Bitcoin, Waves } from "lucide-react";
+import type { PremiumUser, PaymentConfig } from "@shared/schema";
 
 type Filter = "all" | "pending" | "active" | "revoked";
 
@@ -18,12 +18,125 @@ function fmt(d: string | Date | null | undefined) {
   return new Date(d).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+function PaymentConfigSection({
+  lightning, onLightning,
+  bch, onBch,
+  btc, onBtc,
+  liquid, onLiquid,
+  onSave, isPending, isSaved,
+}: {
+  lightning: string; onLightning: (v: string) => void;
+  bch: string; onBch: (v: string) => void;
+  btc: string; onBtc: (v: string) => void;
+  liquid: string; onLiquid: (v: string) => void;
+  onSave: () => void; isPending: boolean; isSaved: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="bg-card border border-border/40 rounded-xl overflow-hidden" data-testid="payment-config-section">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/3 transition-colors"
+        data-testid="button-toggle-payment-config"
+      >
+        <div className="flex items-center gap-2">
+          <Settings size={14} className="text-amber-400" />
+          <span className="text-sm font-semibold text-foreground">Payment Addresses</span>
+          <span className="text-[10px] text-muted-foreground/50">— shown to users on Premium upgrade</span>
+        </div>
+        {open ? <ChevronUp size={13} className="text-muted-foreground/40" /> : <ChevronDown size={13} className="text-muted-foreground/40" />}
+      </button>
+
+      {open && (
+        <div className="border-t border-border/30 px-4 py-4 space-y-3 bg-background/30">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">
+                <Zap size={10} className="text-amber-400" /> Lightning address
+              </label>
+              <input
+                type="text"
+                value={lightning}
+                onChange={(e) => onLightning(e.target.value)}
+                placeholder="you@walletofsatoshi.com"
+                className="w-full bg-background/50 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-amber-400/40"
+                data-testid="input-payment-lightning"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">
+                <span className="text-green-400 text-[10px] font-bold">₿</span> BCH address
+              </label>
+              <input
+                type="text"
+                value={bch}
+                onChange={(e) => onBch(e.target.value)}
+                placeholder="bitcoincash:q..."
+                className="w-full bg-background/50 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-amber-400/40"
+                data-testid="input-payment-bch"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">
+                <Bitcoin size={10} className="text-orange-400" /> BTC address
+              </label>
+              <input
+                type="text"
+                value={btc}
+                onChange={(e) => onBtc(e.target.value)}
+                placeholder="bc1q..."
+                className="w-full bg-background/50 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-amber-400/40"
+                data-testid="input-payment-btc"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">
+                <Waves size={10} className="text-blue-400" /> Liquid address
+              </label>
+              <input
+                type="text"
+                value={liquid}
+                onChange={(e) => onLiquid(e.target.value)}
+                placeholder="lq1..."
+                className="w-full bg-background/50 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-amber-400/40"
+                data-testid="input-payment-liquid"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              onClick={onSave}
+              disabled={isPending}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/30 text-xs font-mono font-semibold hover:bg-amber-500/25 disabled:opacity-40 transition-colors"
+              data-testid="button-save-payment-config"
+            >
+              {isPending ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
+              {isPending ? "Saving…" : "Save"}
+            </button>
+            {isSaved && (
+              <span className="flex items-center gap-1 text-[11px] text-green-400 font-mono">
+                <CheckCircle2 size={11} /> Saved
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [adminKey, setAdminKey] = useState(() => sessionStorage.getItem("bcb-admin-key") ?? "");
   const [keyInput, setKeyInput] = useState("");
   const [authError, setAuthError] = useState("");
   const [filter, setFilter] = useState<Filter>("pending");
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [paymentSaved, setPaymentSaved] = useState(false);
+  const [pcLightning, setPcLightning] = useState("");
+  const [pcBch, setPcBch] = useState("");
+  const [pcBtc, setPcBtc] = useState("");
+  const [pcLiquid, setPcLiquid] = useState("");
 
   const authenticated = !!adminKey;
   const qc = useQueryClient();
@@ -58,6 +171,41 @@ export default function AdminPage() {
       return res.json();
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/admin/premium", adminKey] }),
+  });
+
+  useQuery<PaymentConfig>({
+    queryKey: ["/api/config/payment"],
+    queryFn: async () => {
+      const res = await fetch("/api/config/payment");
+      return res.json();
+    },
+    enabled: authenticated,
+    staleTime: 0,
+    refetchOnMount: true,
+    select: (data) => {
+      setPcLightning(data.lightningAddress ?? "");
+      setPcBch(data.bchAddress ?? "");
+      setPcBtc(data.btcAddress ?? "");
+      setPcLiquid(data.liquidAddress ?? "");
+      return data;
+    },
+  });
+
+  const savePaymentConfig = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/payment-config", {
+        method: "PUT",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ lightningAddress: pcLightning, bchAddress: pcBch, btcAddress: pcBtc, liquidAddress: pcLiquid }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/config/payment"] });
+      setPaymentSaved(true);
+      setTimeout(() => setPaymentSaved(false), 2500);
+    },
   });
 
   const handleLogin = async () => {
@@ -148,6 +296,18 @@ export default function AdminPage() {
       </div>
 
       <div className="max-w-4xl mx-auto p-4 space-y-4">
+
+        {/* Payment Config */}
+        <PaymentConfigSection
+          lightning={pcLightning} onLightning={setPcLightning}
+          bch={pcBch} onBch={setPcBch}
+          btc={pcBtc} onBtc={setPcBtc}
+          liquid={pcLiquid} onLiquid={setPcLiquid}
+          onSave={() => savePaymentConfig.mutate()}
+          isPending={savePaymentConfig.isPending}
+          isSaved={paymentSaved}
+        />
+
         {/* Filter tabs */}
         <div className="flex items-center gap-1">
           {(["pending", "active", "revoked", "all"] as Filter[]).map((f) => (

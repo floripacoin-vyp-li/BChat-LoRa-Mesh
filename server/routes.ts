@@ -546,6 +546,34 @@ export async function registerRoutes(
     }
   });
 
+  // ── Payment config ─────────────────────────────────────────────────────────
+
+  app.get("/api/config/payment", async (_req, res) => {
+    try {
+      const config = await storage.getPaymentConfig();
+      res.json(config ?? { lightningAddress: "", bchAddress: "", btcAddress: "", liquidAddress: "" });
+    } catch {
+      res.status(500).json({ message: "Failed to load payment config" });
+    }
+  });
+
+  app.put("/api/admin/payment-config", adminAuth, async (req, res) => {
+    try {
+      const schema = z.object({
+        lightningAddress: z.string().max(200),
+        bchAddress: z.string().max(200),
+        btcAddress: z.string().max(200),
+        liquidAddress: z.string().max(200),
+      });
+      const data = schema.parse(req.body);
+      const config = await storage.upsertPaymentConfig(data);
+      res.json({ ok: true, config });
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      res.status(500).json({ message: "Failed to save payment config" });
+    }
+  });
+
   return httpServer;
 }
 

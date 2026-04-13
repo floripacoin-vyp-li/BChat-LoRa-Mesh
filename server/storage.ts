@@ -4,6 +4,7 @@ import {
   users,
   bugReports,
   premiumUsers,
+  paymentConfig,
   verificationCodes,
   type InsertMessage,
   type Message,
@@ -11,6 +12,7 @@ import {
   type InsertBugReport,
   type BugReport,
   type PremiumUser,
+  type PaymentConfig,
 } from "@shared/schema";
 import { eq, asc, gt, and, notInArray, isNull, lt, sql } from "drizzle-orm";
 
@@ -39,6 +41,8 @@ export interface IStorage {
   reclaimAlias(alias: string, publicKey: string): Promise<void>;
   createVerificationCode(email: string, code: string): Promise<void>;
   verifyCode(email: string, code: string): Promise<boolean>;
+  getPaymentConfig(): Promise<PaymentConfig | null>;
+  upsertPaymentConfig(data: { lightningAddress: string; bchAddress: string; btcAddress: string; liquidAddress: string }): Promise<PaymentConfig>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -303,6 +307,25 @@ export class DatabaseStorage implements IStorage {
       .set({ used: true })
       .where(eq(verificationCodes.id, row.id));
     return true;
+  }
+
+  async getPaymentConfig(): Promise<PaymentConfig | null> {
+    const [row] = await db.select().from(paymentConfig).where(eq(paymentConfig.id, 1)).limit(1);
+    return row ?? null;
+  }
+
+  async upsertPaymentConfig(data: { lightningAddress: string; bchAddress: string; btcAddress: string; liquidAddress: string }): Promise<PaymentConfig> {
+    const [existing] = await db.select().from(paymentConfig).where(eq(paymentConfig.id, 1)).limit(1);
+    if (existing) {
+      const [updated] = await db
+        .update(paymentConfig)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(paymentConfig.id, 1))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(paymentConfig).values({ id: 1, ...data }).returning();
+    return created;
   }
 
 }

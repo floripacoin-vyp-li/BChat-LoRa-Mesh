@@ -64,6 +64,7 @@ export function ContactsPanel({
   const [premiumFormError, setPremiumFormError] = useState<string | null>(null);
   const [premiumSubmitted, setPremiumSubmitted] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [paymentTab, setPaymentTab] = useState<"lightning" | "bch" | "btc" | "liquid">("lightning");
 
   const { data: premiumStatus } = useQuery<{ isPremium: boolean; email?: string; expiresAt?: string }>({
     queryKey: ["/api/premium/status", myAlias],
@@ -77,6 +78,11 @@ export function ContactsPanel({
     staleTime: 60_000,
   });
 
+  const { data: paymentCfg } = useQuery<{ lightningAddress: string; bchAddress: string; btcAddress: string; liquidAddress: string }>({
+    queryKey: ["/api/config/payment"],
+    staleTime: 300_000,
+  });
+
   const isPremium = premiumStatus?.isPremium === true;
 
   // $10 USD worth of sats, rounded to nearest 100 sats
@@ -84,10 +90,19 @@ export function ContactsPanel({
     ? Math.round((10 / prices.btc) * 100_000_000 / 100) * 100
     : null;
   const requiredMsats = requiredSats ? requiredSats * 1000 : null;
-  const lightningAddress = "floripacoin@walletofsatoshi.com";
-  const lightningUri = requiredMsats
-    ? `lightning:${lightningAddress}?amount=${requiredMsats}`
-    : `lightning:${lightningAddress}`;
+  const lightningAddress = paymentCfg?.lightningAddress ?? "";
+  const lightningUri = lightningAddress
+    ? (requiredMsats ? `lightning:${lightningAddress}?amount=${requiredMsats}` : `lightning:${lightningAddress}`)
+    : "";
+
+  // Payment methods available (non-empty)
+  type PayTab = "lightning" | "bch" | "btc" | "liquid";
+  const paymentMethods: { key: PayTab; label: string; address: string; qrValue: string; placeholder: string }[] = [
+    { key: "lightning", label: "Lightning", address: lightningAddress, qrValue: lightningUri || lightningAddress, placeholder: "No Lightning address set" },
+    { key: "bch",       label: "BCH",       address: paymentCfg?.bchAddress ?? "",   qrValue: paymentCfg?.bchAddress ?? "",   placeholder: "No BCH address set" },
+    { key: "btc",       label: "BTC",       address: paymentCfg?.btcAddress ?? "",   qrValue: paymentCfg?.btcAddress ?? "",   placeholder: "No BTC address set" },
+    { key: "liquid",    label: "Liquid",    address: paymentCfg?.liquidAddress ?? "", qrValue: paymentCfg?.liquidAddress ?? "", placeholder: "No Liquid address set" },
+  ].filter((m) => m.address);
 
   // Step 1: send verification code to email
   const sendCodeMutation = useMutation({
@@ -122,11 +137,6 @@ export function ContactsPanel({
     },
   });
 
-  const handleCopyLightning = () => {
-    navigator.clipboard.writeText(lightningAddress);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   const handleSendCode = () => {
     if (!premiumEmail.includes("@")) {
@@ -729,36 +739,63 @@ export function ContactsPanel({
                     <div className="flex items-start gap-2">
                       <Star size={13} className="text-amber-400 mt-0.5 flex-shrink-0" />
                       <p className="text-[11px] font-mono text-muted-foreground/70 leading-relaxed">
-                        Pay <strong className="text-amber-300">$10 / year</strong> in sats to unlock wallet backup and a verified badge.
+                        Pay <strong className="text-amber-300">$10 / year</strong> to unlock wallet backup and a verified badge.
                       </p>
                     </div>
 
-                    {/* Payment target */}
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">Pay to</p>
-                      <div className="flex items-center gap-2 bg-black/20 border border-white/10 rounded-lg px-2.5 py-2">
-                        <Zap size={11} className="text-amber-400 flex-shrink-0" />
-                        <span className="flex-1 text-[11px] font-mono text-amber-300 break-all">{lightningAddress}</span>
-                        <button
-                          onClick={handleCopyLightning}
-                          className="text-muted-foreground/50 hover:text-foreground transition-colors ml-1 flex-shrink-0"
-                          title="Copy Lightning address"
-                          data-testid="button-copy-lightning-address"
-                        >
-                          {copied ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
-                        </button>
-                      </div>
-                      {requiredSats && (
-                        <p className="text-[10px] font-mono text-muted-foreground/50 pl-1">
-                          ≈ {requiredSats.toLocaleString()} sats ($10 USD)
-                        </p>
-                      )}
-                    </div>
+                    {paymentMethods.length > 0 && (
+                      <>
+                        {/* Payment method tabs */}
+                        {paymentMethods.length > 1 && (
+                          <div className="flex gap-1">
+                            {paymentMethods.map((m) => (
+                              <button
+                                key={m.key}
+                                onClick={() => setPaymentTab(m.key)}
+                                className={`px-2.5 py-1 rounded-md text-[10px] font-mono font-semibold transition-colors ${
+                                  paymentTab === m.key
+                                    ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                                    : "text-muted-foreground/50 hover:text-foreground border border-transparent"
+                                }`}
+                                data-testid={`tab-payment-${m.key}`}
+                              >
+                                {m.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
 
-                    {/* QR code for Lightning URI */}
-                    <div className="flex justify-center py-1">
-                      <QRCodeDisplay value={lightningUri} size={140} />
-                    </div>
+                        {/* Active payment method */}
+                        {(() => {
+                          const active = paymentMethods.find((m) => m.key === paymentTab) ?? paymentMethods[0];
+                          return (
+                            <div className="space-y-1.5">
+                              <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">Pay to ({active.label})</p>
+                              <div className="flex items-center gap-2 bg-black/20 border border-white/10 rounded-lg px-2.5 py-2">
+                                <Zap size={11} className="text-amber-400 flex-shrink-0" />
+                                <span className="flex-1 text-[11px] font-mono text-amber-300 break-all">{active.address}</span>
+                                <button
+                                  onClick={() => { navigator.clipboard.writeText(active.address); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+                                  className="text-muted-foreground/50 hover:text-foreground transition-colors ml-1 flex-shrink-0"
+                                  title={`Copy ${active.label} address`}
+                                  data-testid={`button-copy-payment-${active.key}`}
+                                >
+                                  {copied ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
+                                </button>
+                              </div>
+                              {active.key === "lightning" && requiredSats && (
+                                <p className="text-[10px] font-mono text-muted-foreground/50 pl-1">
+                                  ≈ {requiredSats.toLocaleString()} sats ($10 USD)
+                                </p>
+                              )}
+                              <div className="flex justify-center py-1">
+                                <QRCodeDisplay value={active.qrValue} size={140} />
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </>
+                    )}
                   </>
                 )}
 

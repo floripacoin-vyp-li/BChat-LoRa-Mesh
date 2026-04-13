@@ -88,6 +88,18 @@ export const insertPremiumUserSchema = createInsertSchema(premiumUsers)
 export type InsertPremiumUser = z.infer<typeof insertPremiumUserSchema>;
 export type PremiumUser = typeof premiumUsers.$inferSelect;
 
+// ── Payment config (admin-configurable) ────────────────────────────────────
+export const paymentConfig = pgTable("payment_config", {
+  id: serial("id").primaryKey(),
+  lightningAddress: text("lightning_address").notNull().default(""),
+  bchAddress: text("bch_address").notNull().default(""),
+  btcAddress: text("btc_address").notNull().default(""),
+  liquidAddress: text("liquid_address").notNull().default(""),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type PaymentConfig = typeof paymentConfig.$inferSelect;
+
 // ── Email verification codes ────────────────────────────────────────────────
 export const verificationCodes = pgTable("verification_codes", {
   id: serial("id").primaryKey(),
