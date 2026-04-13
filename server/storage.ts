@@ -147,6 +147,15 @@ export class DatabaseStorage implements IStorage {
     if (row) {
       // Active registration (not freed)
       if (!row.freedAt) {
+        // Auto-expire random (non-email) aliases after 1 week
+        const isEmailAlias = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(alias);
+        if (!isEmailAlias && row.registeredAt) {
+          const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+          if (new Date(row.registeredAt) < oneWeekAgo) {
+            await db.update(users).set({ freedAt: new Date() }).where(eq(users.id, row.id));
+            return "taken";
+          }
+        }
         if (row.publicKey !== publicKey) return "taken";
         if (bchAddress) {
           await db.update(users).set({ bchAddress }).where(eq(users.id, row.id));
