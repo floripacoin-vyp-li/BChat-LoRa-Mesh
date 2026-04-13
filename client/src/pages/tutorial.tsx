@@ -14,6 +14,8 @@ import {
   AlertTriangle,
   Clock,
   Send,
+  Crown,
+  BadgeCheck,
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -38,6 +40,11 @@ const sections = [
           <li>
             Or tap <strong>Connect USB</strong> if your device is plugged in via
             cable (Chrome/Edge only).
+          </li>
+          <li>
+            If the BLE connection drops after a send (common on Android), the
+            app <strong>auto-reconnects</strong> silently — a "Reconnecting…"
+            banner appears while it retries.
           </li>
           <li>
             When a remote <strong>BLB Node</strong> operator is active, messages
@@ -139,6 +146,10 @@ const sections = [
             BCH address via paste or QR scan.
           </li>
           <li>
+            The app also generates a built-in BCH address automatically — tap
+            Wallet to view or copy it.
+          </li>
+          <li>
             In a private chat, tap the <strong>BCH</strong> button to send a
             payment request card with your address and an optional amount.
           </li>
@@ -164,8 +175,8 @@ const sections = [
         </p>
         <ul className="mt-3 space-y-2 list-disc list-inside text-muted-foreground">
           <li>
-            Clears your alias, contacts, encryption keys, and BCH address from
-            this browser.
+            Clears your alias, contacts, encryption keys, BCH address, and
+            private keys from this browser.
           </li>
           <li>
             Deletes your messages from the server and frees your username for
@@ -294,8 +305,56 @@ export default function Tutorial() {
           ))}
         </div>
 
+        {/* Premium Features */}
+        <div className="mt-8 glass-panel rounded-xl p-6 border border-amber-500/20" data-testid="premium-section">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0">
+              <Crown size={16} className="text-amber-400" />
+            </div>
+            <h2 className="text-sm font-semibold tracking-wide text-foreground uppercase">
+              Premium Features
+            </h2>
+          </div>
+          <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+            Upgrade to <strong className="text-amber-300">BCB Premium</strong> for{" "}
+            <strong className="text-amber-300">$10 / year</strong> (paid in sats via Lightning)
+            to unlock the following features inside the <strong>Secure</strong> panel.
+          </p>
+          <ul className="space-y-3 text-sm text-muted-foreground">
+            <li className="flex items-start gap-2">
+              <BadgeCheck size={14} className="text-amber-400 mt-0.5 flex-shrink-0" />
+              <span>
+                <strong className="text-foreground">Verified badge</strong> — your alias
+                displays a gold checkmark so others know you're a verified member.
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <BadgeCheck size={14} className="text-amber-400 mt-0.5 flex-shrink-0" />
+              <span>
+                <strong className="text-foreground">Email as alias</strong> — use your
+                email address (e.g. <em>you@example.com</em>) as your mesh alias instead
+                of a random handle.
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <BadgeCheck size={14} className="text-amber-400 mt-0.5 flex-shrink-0" />
+              <span>
+                <strong className="text-foreground">Full wallet backup &amp; restore</strong> —
+                download a single encrypted JSON file that contains your alias, all wallet
+                addresses, your E2E encryption key pair, your BCH private key, and your
+                contact list. Restore it on any device to recover everything instantly.
+              </span>
+            </li>
+          </ul>
+          <p className="mt-4 text-xs text-muted-foreground/60 leading-relaxed">
+            To activate, open the <strong>Secure</strong> panel → scroll to{" "}
+            <strong>Premium Verified</strong> → follow the Lightning payment instructions,
+            then submit your email for verification. Approval is usually within 24 hours.
+          </p>
+        </div>
+
         {/* Bug Report */}
-        <div className="mt-12 glass-panel rounded-xl p-6" data-testid="bug-report-section">
+        <div className="mt-8 glass-panel rounded-xl p-6" data-testid="bug-report-section">
           <div className="flex items-center gap-3 mb-1">
             <div className="w-8 h-8 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center justify-center flex-shrink-0">
               <Bug size={16} className="text-destructive" />
