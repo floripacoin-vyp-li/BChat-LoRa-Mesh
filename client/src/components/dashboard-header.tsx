@@ -1,4 +1,4 @@
-import { Activity, Bluetooth, BookOpen, Check, Clipboard, Cpu, LogOut, Power, QrCode, ShieldCheck, Usb } from "lucide-react";
+import { Activity, Bluetooth, BookOpen, Check, Clipboard, LogOut, Power, QrCode, ShieldCheck, Usb } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 
@@ -106,17 +106,6 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, 
           >
             <BookOpen size={12} />
             <span className="hidden sm:inline">Guide</span>
-          </button>
-        </Link>
-
-        <Link href="/firmware">
-          <button
-            className="px-3 py-2 rounded-lg border border-white/10 text-muted-foreground hover:bg-primary/10 hover:border-primary/30 hover:text-primary flex items-center gap-1.5 text-xs font-mono transition-colors"
-            title="BLB Node Firmware for ESP32"
-            data-testid="link-firmware"
-          >
-            <Cpu size={12} />
-            <span className="hidden sm:inline">Firmware</span>
           </button>
         </Link>
 
