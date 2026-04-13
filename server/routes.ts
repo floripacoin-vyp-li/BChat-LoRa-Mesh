@@ -24,11 +24,12 @@ async function sendApprovalEmail(to: string, alias: string, expiresAt: Date): Pr
     from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
     to,
     subject: "BCB Premium — your account has been approved!",
-    text: `Great news! Your BCB Premium account for alias "${alias}" has been approved and is now active until ${expiresAt.toDateString()}.\n\nEnjoy your verified badge and wallet backup features.`,
+    text: `Great news! Your BCB Premium account for alias "${alias}" has been approved and is now active until ${expiresAt.toDateString()}.\n\nAlias: ${alias}\nEmail: ${to}\nActive until: ${expiresAt.toDateString()}\n\nEnjoy your verified badge and wallet backup features.`,
     html: `<div style="font-family:monospace;max-width:420px;margin:auto;padding:24px;background:#0a0a0a;color:#e8e8e8;border-radius:12px;border:1px solid #222">
   <p style="margin:0 0 8px;font-size:13px;color:#888;letter-spacing:.08em;text-transform:uppercase">BCB Premium Approved</p>
   <p style="margin:0 0 16px;font-size:22px;font-weight:700;color:#f59e0b">✓ Your account is now active</p>
   <p style="margin:0 0 8px;font-size:12px;color:#aaa">Alias: <strong style="color:#e8e8e8">${alias}</strong></p>
+  <p style="margin:0 0 8px;font-size:12px;color:#aaa">Email: <strong style="color:#e8e8e8">${to}</strong></p>
   <p style="margin:0 0 16px;font-size:12px;color:#aaa">Active until: <strong style="color:#e8e8e8">${expiresAt.toDateString()}</strong></p>
   <p style="margin:0;font-size:11px;color:#666">You now have access to wallet backup and a verified badge. Reload the app to see your benefits.</p>
 </div>`,
