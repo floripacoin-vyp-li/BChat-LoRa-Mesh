@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { X, Trash2, MessageSquareLock, ChevronRight, QrCode, ScanLine, KeyRound, Search, Loader2 } from "lucide-react";
+import { useState, useRef } from "react";
+import { X, Trash2, MessageSquareLock, ChevronRight, QrCode, ScanLine, KeyRound, Search, Loader2, Wallet, Download, Upload, ShieldAlert, CheckCircle2, BadgeCheck, Star, Mail, Zap, Copy, Check } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { QRCodeDisplay } from "@/components/qr-code";
 import { QRScanner, buildQRKeyPayload, type ScannedKey } from "@/components/qr-scanner";
 import type { Contact } from "@/hooks/use-contacts";
+import { exportKeyPair, importKeyPairFromBackup } from "@/lib/crypto";
+import { apiRequest } from "@/lib/queryClient";
 
 interface ContactsPanelProps {
   contacts: Contact[];
@@ -12,6 +15,7 @@ interface ContactsPanelProps {
   onAddContact: (alias: string, publicKeyBase64: string) => Promise<void>;
   onRemoveContact: (alias: string) => void;
   onOpenChat: (contactAlias: string) => void;
+  onOpenWallet: () => void;
   onClose: () => void;
 }
 
@@ -25,9 +29,10 @@ export function ContactsPanel({
   onAddContact,
   onRemoveContact,
   onOpenChat,
+  onOpenWallet,
   onClose,
 }: ContactsPanelProps) {
-  const [showMyQR, setShowMyQR] = useState(true);
+  const [showMyQR, setShowMyQR] = useState(false);
   const [addMode, setAddMode] = useState<AddMode>("idle");
   const [scannedAlias, setScannedAlias] = useState("");
   const [scannedKey, setScannedKey] = useState("");
@@ -40,6 +45,163 @@ export function ContactsPanel({
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [lookupResult, setLookupResult] = useState<{ alias: string; publicKey: string } | null>(null);
   const [isLooking, setIsLooking] = useState(false);
+
+  type BackupState = "idle" | "busy" | "success" | "error";
+  const [backupState, setBackupState] = useState<BackupState>("idle");
+  const [backupError, setBackupError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Premium ────────────────────────────────────────────────────────────────
+  const qc = useQueryClient();
+  // step: "form" → enter email + optional note; "verify" → enter OTP; "done" → success
+  type PremiumStep = "form" | "verify";
+  const [premiumStep, setPremiumStep] = useState<PremiumStep>("form");
+  const [premiumEmail, setPremiumEmail] = useState("");
+  const [premiumNote, setPremiumNote] = useState("");
+  const [premiumProof, setPremiumProof] = useState("");
+  const [premiumCode, setPremiumCode] = useState("");
+  const [premiumFormError, setPremiumFormError] = useState<string | null>(null);
+  const [premiumSubmitted, setPremiumSubmitted] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const { data: premiumStatus } = useQuery<{ isPremium: boolean; email?: string; expiresAt?: string }>({
+    queryKey: ["/api/premium/status", myAlias],
+    queryFn: () => fetch(`/api/premium/status/${encodeURIComponent(myAlias)}`).then((r) => r.json()),
+    enabled: !!myAlias,
+    staleTime: 60_000,
+  });
+
+  const { data: prices } = useQuery<{ bch: number; btc: number }>({
+    queryKey: ["/api/prices"],
+    staleTime: 60_000,
+  });
+
+  const isPremium = premiumStatus?.isPremium === true;
+
+  // $10 USD worth of sats, rounded to nearest 100 sats
+  const requiredSats = prices?.btc
+    ? Math.round((10 / prices.btc) * 100_000_000 / 100) * 100
+    : null;
+  const requiredMsats = requiredSats ? requiredSats * 1000 : null;
+  const lightningAddress = "floripacoin@walletofsatoshi.com";
+  const lightningUri = requiredMsats
+    ? `lightning:${lightningAddress}?amount=${requiredMsats}`
+    : `lightning:${lightningAddress}`;
+
+  // Step 1: send verification code to email
+  const sendCodeMutation = useMutation({
+    mutationFn: (email: string) => apiRequest("POST", "/api/premium/send-code", { email }),
+    onSuccess: () => {
+      setPremiumStep("verify");
+      setPremiumFormError(null);
+    },
+    onError: async (err: any) => {
+      const msg = await err?.response?.json?.().catch(() => null);
+      setPremiumFormError(msg?.message ?? "Failed to send code. Check your email and try again.");
+    },
+  });
+
+  // Step 2: verify code + submit premium request (pending approval)
+  const claimMutation = useMutation({
+    mutationFn: (data: { alias: string; email: string; code: string; paymentNote?: string; paymentProof?: string }) =>
+      apiRequest("POST", "/api/premium/claim", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/premium/status", myAlias] });
+      setPremiumEmail("");
+      setPremiumNote("");
+      setPremiumProof("");
+      setPremiumCode("");
+      setPremiumStep("form");
+      setPremiumFormError(null);
+      setPremiumSubmitted(true);
+    },
+    onError: async (err: any) => {
+      const msg = await err?.response?.json?.().catch(() => null);
+      setPremiumFormError(msg?.message ?? "Invalid or expired code. Please try again.");
+    },
+  });
+
+  const handleCopyLightning = () => {
+    navigator.clipboard.writeText(lightningAddress);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSendCode = () => {
+    if (!premiumEmail.includes("@")) {
+      setPremiumFormError("Please enter a valid email address.");
+      return;
+    }
+    setPremiumFormError(null);
+    sendCodeMutation.mutate(premiumEmail);
+  };
+
+  const handleVerifyCode = () => {
+    if (premiumCode.length !== 6) {
+      setPremiumFormError("Enter the 6-digit code from your email.");
+      return;
+    }
+    setPremiumFormError(null);
+    claimMutation.mutate({ alias: myAlias, email: premiumEmail, code: premiumCode, paymentNote: premiumNote || undefined, paymentProof: premiumProof || undefined });
+  };
+
+  const handleDownloadBackup = async () => {
+    setBackupState("busy");
+    setBackupError(null);
+    try {
+      const keyPair = await exportKeyPair();
+      const alias = localStorage.getItem("bcb-alias") ?? "";
+      const backup = {
+        bcbVersion: 1,
+        alias,
+        addresses: {
+          bch:       localStorage.getItem("bcb-bch-address")       ?? "",
+          btc:       localStorage.getItem("bcb-btc-address")       ?? "",
+          lightning: localStorage.getItem("bcb-lightning-address") ?? "",
+          liquid:    localStorage.getItem("bcb-liquid-address")    ?? "",
+        },
+        activeCurrency: localStorage.getItem("bcb-payment-currency") ?? "bch",
+        contacts: JSON.parse(localStorage.getItem("bcb-contacts") ?? "[]"),
+        keyPair,
+      };
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `bcb-backup-${alias || "wallet"}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setBackupState("idle");
+    } catch {
+      setBackupState("error");
+      setBackupError("Failed to export wallet. Try again.");
+    }
+  };
+
+  const handleRestoreFile = async (file: File) => {
+    setBackupState("busy");
+    setBackupError(null);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data.bcbVersion || data.bcbVersion !== 1) throw new Error("Invalid backup file.");
+      if (data.alias)                          localStorage.setItem("bcb-alias",            data.alias);
+      if (data.addresses?.bch)                 localStorage.setItem("bcb-bch-address",       data.addresses.bch);
+      if (data.addresses?.btc)                 localStorage.setItem("bcb-btc-address",       data.addresses.btc);
+      if (data.addresses?.lightning)           localStorage.setItem("bcb-lightning-address", data.addresses.lightning);
+      if (data.addresses?.liquid)              localStorage.setItem("bcb-liquid-address",    data.addresses.liquid);
+      if (data.activeCurrency)                 localStorage.setItem("bcb-payment-currency",  data.activeCurrency);
+      if (Array.isArray(data.contacts))        localStorage.setItem("bcb-contacts",          JSON.stringify(data.contacts));
+      if (data.keyPair?.privateKey && data.keyPair?.publicKey) {
+        await importKeyPairFromBackup(data.keyPair.privateKey, data.keyPair.publicKey);
+      }
+      setBackupState("success");
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (e) {
+      setBackupState("error");
+      setBackupError(e instanceof Error ? e.message : "Failed to restore backup.");
+    }
+  };
 
   const myQRPayload =
     myPublicKeyBase64 ? buildQRKeyPayload(myAlias, myPublicKeyBase64) : null;
@@ -154,13 +316,24 @@ export function ContactsPanel({
               Secure Contacts
             </span>
           </div>
-          <button
-            onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors"
-            data-testid="button-close-contacts"
-          >
-            <X size={16} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onOpenWallet}
+              className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/50 hover:text-primary transition-colors uppercase tracking-wide px-2 py-1 rounded-lg hover:bg-primary/10"
+              title="BCH Wallet"
+              data-testid="button-open-wallet"
+            >
+              <Wallet size={12} />
+              Wallet
+            </button>
+            <button
+              onClick={onClose}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="button-close-contacts"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-5">
@@ -257,7 +430,7 @@ export function ContactsPanel({
                     value={lookupAlias}
                     onChange={(e) => { setLookupAlias(e.target.value); setLookupError(null); }}
                     onKeyDown={(e) => e.key === "Enter" && !isLooking && handleLookup()}
-                    maxLength={24}
+                    maxLength={254}
                     className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40"
                     data-testid="input-lookup-alias"
                   />
@@ -329,7 +502,7 @@ export function ContactsPanel({
                   value={scannedAlias}
                   onChange={(e) => setScannedAlias(e.target.value)}
                   placeholder="Alias..."
-                  maxLength={24}
+                  maxLength={254}
                   className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40"
                   data-testid="input-scanned-alias"
                 />
@@ -367,7 +540,7 @@ export function ContactsPanel({
                   placeholder="Their alias..."
                   value={pasteAlias}
                   onChange={(e) => setPasteAlias(e.target.value)}
-                  maxLength={24}
+                  maxLength={254}
                   className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40"
                   data-testid="input-contact-alias"
                 />
@@ -420,13 +593,17 @@ export function ContactsPanel({
                       className="flex items-center gap-3 bg-background/40 hover:bg-background/60 border border-white/5 rounded-xl px-3 py-2.5 transition-colors group"
                       data-testid={`row-contact-${c.alias}`}
                     >
-                      <div className="flex-1 min-w-0">
+                      <button
+                        className="flex-1 min-w-0 text-left"
+                        onClick={() => onOpenChat(c.alias)}
+                        data-testid={`button-open-chat-alias-${c.alias}`}
+                      >
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-mono text-foreground font-medium truncate">
                             {c.alias}
                           </span>
                           {unread > 0 && (
-                            <span className="bg-primary text-primary-foreground text-[10px] font-mono px-1.5 py-0.5 rounded-full">
+                            <span className="bg-primary text-primary-foreground text-[10px] font-mono px-1.5 py-0.5 rounded-full cursor-pointer">
                               {unread}
                             </span>
                           )}
@@ -434,7 +611,7 @@ export function ContactsPanel({
                         <span className="text-[10px] font-mono text-muted-foreground/40">
                           {truncateKey(c.publicKeyBase64)}
                         </span>
-                      </div>
+                      </button>
                       <button
                         onClick={() => onOpenChat(c.alias)}
                         className="text-primary hover:text-primary/80 transition-colors"
@@ -457,6 +634,237 @@ export function ContactsPanel({
               </div>
             )}
           </div>
+
+          {/* ── Premium Verified ───────────────────────────────────────── */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60">
+                Premium Verified
+              </p>
+              {isPremium && <BadgeCheck size={12} className="text-amber-400" />}
+            </div>
+
+            {isPremium ? (
+              /* ── Active premium card ── */
+              <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <BadgeCheck size={15} className="text-amber-400" />
+                  <span className="text-xs font-mono font-semibold text-amber-300">Verified Premium</span>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground/60">
+                  <Mail size={10} />
+                  {premiumStatus?.email}
+                </div>
+                {premiumStatus?.expiresAt && (
+                  <p className="text-[10px] font-mono text-muted-foreground/40">
+                    Valid until {new Date(premiumStatus.expiresAt).toLocaleDateString()}
+                  </p>
+                )}
+
+                {/* Wallet Backup — unlocked for premium */}
+                <div className="pt-2 border-t border-white/5 space-y-2">
+                  <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60">
+                    Wallet Backup
+                  </p>
+                  <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-2">
+                    <ShieldAlert size={12} className="text-amber-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-[10px] font-mono text-amber-300/80 leading-relaxed">
+                      Backup contains your <strong>private key</strong>. Keep it encrypted, never share it.
+                    </p>
+                  </div>
+                  {backupState === "success" && (
+                    <div className="flex items-center gap-2 text-green-400 text-[11px] font-mono">
+                      <CheckCircle2 size={12} />
+                      Restored! Reloading…
+                    </div>
+                  )}
+                  {backupState === "error" && backupError && (
+                    <p className="text-[10px] font-mono text-destructive">{backupError}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleDownloadBackup}
+                      disabled={backupState === "busy"}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-primary/30 bg-primary/10 text-primary text-[11px] font-mono font-semibold transition-colors hover:bg-primary/20 disabled:opacity-40"
+                      data-testid="button-backup-download"
+                    >
+                      {backupState === "busy" ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+                      Download
+                    </button>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={backupState === "busy"}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-white/10 bg-white/5 text-muted-foreground text-[11px] font-mono font-semibold transition-colors hover:bg-white/10 disabled:opacity-40"
+                      data-testid="button-backup-restore"
+                    >
+                      {backupState === "busy" ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+                      Restore
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".json"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleRestoreFile(file);
+                        e.target.value = "";
+                      }}
+                      data-testid="input-backup-file"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* ── Go-premium card ── */
+              <div className="bg-background/50 border border-white/10 rounded-xl p-3 space-y-3">
+                <div className="flex items-start gap-2">
+                  <Star size={13} className="text-amber-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-[11px] font-mono text-muted-foreground/70 leading-relaxed">
+                    Pay <strong className="text-amber-300">$10 / year</strong> in sats to unlock wallet backup and a verified badge.
+                  </p>
+                </div>
+
+                {/* Payment target */}
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">Pay to</p>
+                  <div className="flex items-center gap-2 bg-black/20 border border-white/10 rounded-lg px-2.5 py-2">
+                    <Zap size={11} className="text-amber-400 flex-shrink-0" />
+                    <span className="flex-1 text-[11px] font-mono text-amber-300 break-all">{lightningAddress}</span>
+                    <button
+                      onClick={handleCopyLightning}
+                      className="text-muted-foreground/50 hover:text-foreground transition-colors ml-1 flex-shrink-0"
+                      title="Copy Lightning address"
+                      data-testid="button-copy-lightning-address"
+                    >
+                      {copied ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
+                    </button>
+                  </div>
+                  {requiredSats && (
+                    <p className="text-[10px] font-mono text-muted-foreground/50 pl-1">
+                      ≈ {requiredSats.toLocaleString()} sats ($10 USD)
+                    </p>
+                  )}
+                </div>
+
+                {/* QR code for Lightning URI */}
+                <div className="flex justify-center py-1">
+                  <QRCodeDisplay value={lightningUri} size={140} />
+                </div>
+
+                {/* Two-step activation form */}
+                {premiumSubmitted ? (
+                  <div className="flex items-start gap-2.5 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-3">
+                    <CheckCircle2 size={14} className="text-amber-400 mt-0.5 flex-shrink-0" />
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-mono font-semibold text-amber-300">Request submitted!</p>
+                      <p className="text-[11px] font-mono text-amber-300/70 leading-relaxed">
+                        Your payment proof is under review. You'll receive a confirmation email once approved (usually within 24 hours).
+                      </p>
+                      <button
+                        onClick={() => setPremiumSubmitted(false)}
+                        className="text-[10px] font-mono text-muted-foreground/50 hover:text-muted-foreground transition-colors mt-1"
+                        data-testid="button-premium-submit-another"
+                      >
+                        Submit another request
+                      </button>
+                    </div>
+                  </div>
+                ) : premiumStep === "form" ? (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">
+                      After paying — enter your email to verify
+                    </p>
+                    <input
+                      type="email"
+                      value={premiumEmail}
+                      onChange={(e) => { setPremiumEmail(e.target.value); setPremiumFormError(null); }}
+                      placeholder="your@email.com"
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40"
+                      data-testid="input-premium-email"
+                    />
+                    <input
+                      type="text"
+                      value={premiumNote}
+                      onChange={(e) => setPremiumNote(e.target.value)}
+                      placeholder="Payment note or reference (optional)"
+                      maxLength={100}
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40"
+                      data-testid="input-premium-note"
+                    />
+                    <textarea
+                      value={premiumProof}
+                      onChange={(e) => setPremiumProof(e.target.value)}
+                      placeholder="Lightning payment proof / preimage (paste here to speed up approval)"
+                      rows={2}
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-amber-400/30 resize-none"
+                      data-testid="input-premium-proof"
+                    />
+                    {premiumFormError && (
+                      <p className="text-[10px] font-mono text-destructive">{premiumFormError}</p>
+                    )}
+                    <button
+                      onClick={handleSendCode}
+                      disabled={sendCodeMutation.isPending || !premiumEmail}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 text-[11px] font-mono font-semibold transition-colors hover:bg-amber-500/20 disabled:opacity-40"
+                      data-testid="button-send-verification-code"
+                    >
+                      {sendCodeMutation.isPending ? <Loader2 size={11} className="animate-spin" /> : <Mail size={11} />}
+                      Send Verification Code
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">
+                        Enter the code sent to
+                      </p>
+                      <button
+                        onClick={() => { setPremiumStep("form"); setPremiumFormError(null); setPremiumCode(""); }}
+                        className="text-[10px] font-mono text-muted-foreground/40 hover:text-foreground transition-colors"
+                        data-testid="button-premium-back"
+                      >
+                        ← back
+                      </button>
+                    </div>
+                    <p className="text-[11px] font-mono text-amber-300/80 truncate">{premiumEmail}</p>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={premiumCode}
+                      onChange={(e) => { setPremiumCode(e.target.value.replace(/\D/g, "")); setPremiumFormError(null); }}
+                      placeholder="6-digit code"
+                      className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-center tracking-widest text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40"
+                      data-testid="input-premium-code"
+                    />
+                    {premiumFormError && (
+                      <p className="text-[10px] font-mono text-destructive">{premiumFormError}</p>
+                    )}
+                    <button
+                      onClick={handleVerifyCode}
+                      disabled={claimMutation.isPending || premiumCode.length !== 6}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 text-[11px] font-mono font-semibold transition-colors hover:bg-amber-500/20 disabled:opacity-40"
+                      data-testid="button-activate-premium"
+                    >
+                      {claimMutation.isPending ? <Loader2 size={11} className="animate-spin" /> : <BadgeCheck size={11} />}
+                      Activate Premium
+                    </button>
+                    <button
+                      onClick={() => sendCodeMutation.mutate(premiumEmail)}
+                      disabled={sendCodeMutation.isPending}
+                      className="w-full text-[10px] font-mono text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                      data-testid="button-resend-code"
+                    >
+                      {sendCodeMutation.isPending ? "Sending…" : "Resend code"}
+                    </button>
+                  </div>
+                )}
+
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
     </>

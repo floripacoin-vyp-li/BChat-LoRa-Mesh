@@ -61,7 +61,20 @@ export function usePrivateMessages(
             };
 
             const existing = threads.current.get(threadAlias) ?? [];
-            if (!existing.some((m) => m.id === privateMsg.id)) {
+            if (existing.some((m) => m.id === privateMsg.id)) {
+              // Already added (e.g. duplicate SSE event) — skip
+            } else if (mine && existing.some((m) => m.mine && m.content === privateMsg.content)) {
+              // Replace the optimistic copy (id: Date.now()) with the real server message
+              threads.current.set(
+                threadAlias,
+                existing.map((m) =>
+                  m.mine && m.content === privateMsg.content && m.id > 1_000_000_000_000
+                    ? privateMsg
+                    : m
+                )
+              );
+              changed = true;
+            } else {
               threads.current.set(threadAlias, [...existing, privateMsg]);
               if (!mine) {
                 setUnreadCounts((prev) => ({

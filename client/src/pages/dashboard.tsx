@@ -6,6 +6,7 @@ import { ChatMessage } from "@/components/chat-message";
 
 import { ContactsPanel } from "@/components/contacts-panel";
 import { PrivateChat } from "@/components/private-chat";
+import { WalletPanel } from "@/components/wallet-panel";
 import { useMessages, useDeleteMessage } from "@/hooks/use-messages";
 import { useBLE } from "@/hooks/use-ble";
 import { useSerial } from "@/hooks/use-serial";
@@ -17,7 +18,10 @@ import { useGatewayPresence } from "@/hooks/use-gateway-presence";
 import { useMeshtasticReady } from "@/hooks/use-meshtastic-ready";
 import { useMyCryptoKey, useContacts } from "@/hooks/use-contacts";
 import { usePrivateMessages } from "@/hooks/use-private-messages";
-import { parseDmPayload } from "@/lib/crypto";
+import { useContactRequests } from "@/hooks/use-contact-requests";
+import { parseDmPayload, parseContactRequest, formatContactRequest, getMyPublicKeyBase64 } from "@/lib/crypto";
+import { ContactRequestNotification } from "@/components/contact-request-notification";
+import type { PendingContactRequest } from "@/hooks/use-contact-requests";
 
 export default function Dashboard() {
   const { data: messages, isLoading, refetch } = useMessages();
@@ -41,15 +45,23 @@ export default function Dashboard() {
   const { myPublicKeyBase64 } = useMyCryptoKey();
   const { contacts, addContact, removeContact, getSharedKey } = useContacts();
   const { getThread, addSentDm, markRead, unreadCounts, totalUnread } = usePrivateMessages(contacts, getSharedKey);
+  const { pending: pendingRequests, dismiss: dismissRequest } = useContactRequests(messages, alias, contacts);
 
   const [dmPanelOpen, setDmPanelOpen] = useState(false);
   const [activeDmContact, setActiveDmContact] = useState<string | null>(null);
+  const [walletOpen, setWalletOpen] = useState(false);
 
   useEffect(() => {
     const handleConnected = () => { if (serverReachable) refetch(); };
     window.addEventListener("ble-connected", handleConnected);
     return () => window.removeEventListener("ble-connected", handleConnected);
   }, [refetch]);
+
+  useEffect(() => {
+    const handler = () => setDmPanelOpen(true);
+    window.addEventListener("bcb:open-premium", handler);
+    return () => window.removeEventListener("bcb:open-premium", handler);
+  }, []);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -68,6 +80,67 @@ export default function Dashboard() {
   const handleClosePanel = () => {
     setDmPanelOpen(false);
     setActiveDmContact(null);
+    setWalletOpen(false);
+  };
+
+  const handleOpenWallet = () => {
+    setWalletOpen(true);
+  };
+
+  const handleCloseWallet = () => {
+    setWalletOpen(false);
+  };
+
+  const handleQuickAddContact = async (senderAlias: string) => {
+    const res = await fetch(`/api/users/${encodeURIComponent(senderAlias)}`);
+    if (!res.ok) throw new Error("User not found — they may not have registered yet");
+    const data = await res.json();
+    if (!data.publicKey) throw new Error("No encryption key on record for this user");
+    await addContact(senderAlias, data.publicKey);
+    // Notify the other user that we want to chat privately
+    const myPubKey = getMyPublicKeyBase64();
+    if (alias && myPubKey) {
+      const content = formatContactRequest(alias, senderAlias, myPubKey);
+      try {
+        await fetch("/api/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content, sender: alias }),
+        });
+      } catch {}
+    }
+  };
+
+  const handleAcceptRequest = async (req: PendingContactRequest) => {
+    try {
+      await addContact(req.fromAlias, req.publicKeyBase64);
+      // Send a request back so they know we accepted
+      const myPubKey = getMyPublicKeyBase64();
+      if (alias && myPubKey) {
+        const content = formatContactRequest(alias, req.fromAlias, myPubKey);
+        try {
+          await fetch("/api/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content, sender: alias }),
+          });
+        } catch {}
+      }
+      dismissRequest(req.messageId);
+      setDmPanelOpen(true);
+      setActiveDmContact(req.fromAlias);
+    } catch (e: unknown) {
+      console.warn("[CREQ] Accept failed:", e);
+    }
+  };
+
+  const handleIgnoreRequest = (req: PendingContactRequest) => {
+    dismissRequest(req.messageId);
+  };
+
+  const handleOpenDmFromMessage = (senderAlias: string) => {
+    setDmPanelOpen(true);
+    setActiveDmContact(senderAlias);
   };
 
   return (
@@ -196,6 +269,8 @@ export default function Dashboard() {
                 </div>
                 {messages.map((msg) => {
                   const isDm = parseDmPayload(msg.content) !== null;
+                  const isCreq = parseContactRequest(msg.content) !== null;
+                  if (isCreq) return null;
                   if (isDm) {
                     return (
                       <div key={msg.id} className="flex items-center gap-2 px-2 py-1" data-testid={`msg-encrypted-${msg.id}`}>
@@ -206,14 +281,31 @@ export default function Dashboard() {
                       </div>
                     );
                   }
-                  return <ChatMessage key={msg.id} message={msg} myAlias={alias} onDelete={(id) => deleteMessage({ id, alias })} />;
+                  return (
+                    <ChatMessage
+                      key={msg.id}
+                      message={msg}
+                      myAlias={alias}
+                      isContact={contacts.some((c) => c.alias === msg.sender)}
+                      onDelete={(id) => deleteMessage({ id, alias })}
+                      onQuickAddContact={handleQuickAddContact}
+                      onOpenChat={handleOpenDmFromMessage}
+                    />
+                  );
                 })}
               </div>
             )}
           </div>
 
+          {/* Contact request notifications */}
+          <ContactRequestNotification
+            requests={pendingRequests}
+            onAccept={handleAcceptRequest}
+            onIgnore={handleIgnoreRequest}
+          />
+
           {/* DM Overlays */}
-          {dmPanelOpen && !activeDmContact && (
+          {dmPanelOpen && !activeDmContact && !walletOpen && (
             <ContactsPanel
               contacts={contacts}
               myPublicKeyBase64={myPublicKeyBase64}
@@ -222,11 +314,12 @@ export default function Dashboard() {
               onAddContact={addContact}
               onRemoveContact={removeContact}
               onOpenChat={handleOpenChat}
+              onOpenWallet={handleOpenWallet}
               onClose={handleClosePanel}
             />
           )}
 
-          {dmPanelOpen && activeDmContact && (
+          {dmPanelOpen && activeDmContact && !walletOpen && (
             <PrivateChat
               contactAlias={activeDmContact}
               myAlias={alias}
@@ -235,6 +328,14 @@ export default function Dashboard() {
               onAddSentDm={addSentDm}
               onMarkRead={markRead}
               onBack={handleBackToContacts}
+            />
+          )}
+
+          {dmPanelOpen && walletOpen && (
+            <WalletPanel
+              myAlias={alias}
+              myPublicKeyBase64={myPublicKeyBase64}
+              onClose={handleCloseWallet}
             />
           )}
         </div>

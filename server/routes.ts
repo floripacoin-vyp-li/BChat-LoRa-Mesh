@@ -1,10 +1,53 @@
 import type { Express, Response } from "express";
 import type { Server } from "http";
 import os from "os";
+import nodemailer from "nodemailer";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import type { Message } from "@shared/schema";
+import { insertBugReportSchema } from "@shared/schema";
+
+// ── Email transport (nodemailer) ────────────────────────────────────────────
+const smtpTransport = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT ?? 587),
+  secure: Number(process.env.SMTP_PORT ?? 587) === 465,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+
+async function sendApprovalEmail(to: string, alias: string, expiresAt: Date): Promise<void> {
+  await smtpTransport.sendMail({
+    from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
+    to,
+    subject: "BCB Premium — your account has been approved!",
+    text: `Great news! Your BCB Premium account for alias "${alias}" has been approved and is now active until ${expiresAt.toDateString()}.\n\nEnjoy your verified badge and wallet backup features.`,
+    html: `<div style="font-family:monospace;max-width:420px;margin:auto;padding:24px;background:#0a0a0a;color:#e8e8e8;border-radius:12px;border:1px solid #222">
+  <p style="margin:0 0 8px;font-size:13px;color:#888;letter-spacing:.08em;text-transform:uppercase">BCB Premium Approved</p>
+  <p style="margin:0 0 16px;font-size:22px;font-weight:700;color:#f59e0b">✓ Your account is now active</p>
+  <p style="margin:0 0 8px;font-size:12px;color:#aaa">Alias: <strong style="color:#e8e8e8">${alias}</strong></p>
+  <p style="margin:0 0 16px;font-size:12px;color:#aaa">Active until: <strong style="color:#e8e8e8">${expiresAt.toDateString()}</strong></p>
+  <p style="margin:0;font-size:11px;color:#666">You now have access to wallet backup and a verified badge. Reload the app to see your benefits.</p>
+</div>`,
+  });
+}
+
+async function sendVerificationEmail(to: string, code: string): Promise<void> {
+  await smtpTransport.sendMail({
+    from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
+    to,
+    subject: "BCB Premium — your verification code",
+    text: `Your BCB verification code is: ${code}\n\nIt expires in 15 minutes. Do not share it with anyone.`,
+    html: `<div style="font-family:monospace;max-width:420px;margin:auto;padding:24px;background:#0a0a0a;color:#e8e8e8;border-radius:12px;border:1px solid #222">
+  <p style="margin:0 0 8px;font-size:13px;color:#888;letter-spacing:.08em;text-transform:uppercase">BCB Premium Verification</p>
+  <p style="margin:0 0 24px;font-size:32px;font-weight:700;letter-spacing:.25em;color:#f59e0b">${code}</p>
+  <p style="margin:0;font-size:12px;color:#666">This code expires in 15 minutes. Never share it.</p>
+</div>`,
+  });
+}
 
 // In-memory SSE client registry — all connected browsers
 const sseClients = new Set<Response>();
@@ -140,7 +183,12 @@ export async function registerRoutes(
   // ── Clear messages ────────────────────────────────────────────────────────
   app.delete(api.messages.clear.path, async (req, res) => {
     try {
-      await storage.clearMessages();
+      const sender = typeof req.query.sender === "string" ? req.query.sender.trim() : null;
+      if (sender) {
+        await storage.deleteMessagesBySender(sender);
+      } else {
+        await storage.clearMessages();
+      }
       broadcastClear();
       res.status(204).end();
     } catch (err) {
@@ -220,21 +268,31 @@ export async function registerRoutes(
 
   // ── Alias claim — registers alias → publicKey binding ────────────────────
   const claimAliasSchema = z.object({
-    alias: z.string().min(2).max(24),
+    alias: z.string().min(2).max(254),
     publicKey: z.string().min(1),
+    bchAddress: z.string().optional(),
   });
 
   const RESERVED_ALIASES = new Set(["system", "node", "gateway", "broadcast", "server", "admin"]);
+  const EMAIL_ALIAS_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   app.post("/api/users/claim", async (req, res) => {
     try {
-      const { alias, publicKey } = claimAliasSchema.parse(req.body);
+      const { alias, publicKey, bchAddress } = claimAliasSchema.parse(req.body);
       if (RESERVED_ALIASES.has(alias.toLowerCase())) {
         return res.status(409).json({ ok: false, message: "Alias already taken" });
       }
-      const result = await storage.claimAlias(alias, publicKey);
+      if (EMAIL_ALIAS_RE.test(alias)) {
+        const premium = await storage.getPremiumByEmail(alias);
+        const isActivePremium = premium && premium.status === "active" && new Date(premium.expiresAt) > new Date();
+        if (!isActivePremium) {
+          return res.status(400).json({ ok: false, message: "Email addresses are reserved for Premium Verified users." });
+        }
+      }
+      const result = await storage.claimAlias(alias, publicKey, bchAddress);
       if (result === "ok") {
-        res.json({ ok: true });
+        const user = await storage.getUserByAlias(alias);
+        res.json({ ok: true, bchAddress: user?.bchAddress ?? null });
       } else {
         res.status(409).json({ ok: false, message: "Alias already taken" });
       }
@@ -246,14 +304,55 @@ export async function registerRoutes(
     }
   });
 
+  // Reclaim an email alias after OTP verification (proves ownership of that email)
+  const reclaimEmailSchema = z.object({
+    alias: z.string().email(),
+    publicKey: z.string().min(1),
+    code: z.string().length(6),
+  });
+
+  app.post("/api/users/reclaim-email", async (req, res) => {
+    try {
+      const { alias, publicKey, code } = reclaimEmailSchema.parse(req.body);
+      const valid = await storage.verifyCode(alias, code);
+      if (!valid) {
+        return res.status(400).json({ ok: false, message: "Invalid or expired verification code." });
+      }
+      await storage.reclaimAlias(alias, publicKey);
+      return res.json({ ok: true });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ ok: false, message: err.errors[0].message });
+      }
+      res.status(500).json({ ok: false, message: "Failed to reclaim alias." });
+    }
+  });
+
   app.get("/api/users/:alias", async (req, res) => {
     try {
       const alias = req.params.alias;
       const user = await storage.getUserByAlias(alias);
       if (!user) return res.status(404).json({ message: "Alias not found" });
-      res.json({ alias: user.alias, publicKey: user.publicKey });
+      res.json({ alias: user.alias, publicKey: user.publicKey, bchAddress: user.bchAddress ?? null });
     } catch (err) {
       res.status(500).json({ message: "Failed to look up alias" });
+    }
+  });
+
+  // ── Delete user — frees alias for others after reset ─────────────────────
+  const deleteUserSchema = z.object({ publicKey: z.string().min(1) });
+
+  app.delete("/api/users/:alias", async (req, res) => {
+    try {
+      const alias = req.params.alias;
+      const { publicKey } = deleteUserSchema.parse(req.body);
+      const result = await storage.deleteUser(alias, publicKey);
+      if (result === "ok") return res.status(204).end();
+      if (result === "forbidden") return res.status(403).json({ message: "Public key mismatch" });
+      return res.status(404).json({ message: "Alias not found" });
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      res.status(500).json({ message: "Failed to delete user" });
     }
   });
 
@@ -282,7 +381,230 @@ export async function registerRoutes(
     res.json({ localUrl, port });
   });
 
+  // ── Crypto price proxy (CoinGecko free API, cached 60 s) ─────────────────
+  let priceCache: { data: Record<string, number>; at: number } | null = null;
+
+  app.get("/api/prices", async (_req, res) => {
+    try {
+      const now = Date.now();
+      if (priceCache && now - priceCache.at < 60_000) {
+        return res.json(priceCache.data);
+      }
+      const upstream = await fetch(
+        "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin-cash,bitcoin&vs_currencies=usd",
+        { signal: AbortSignal.timeout(6000) }
+      );
+      if (!upstream.ok) throw new Error(`CoinGecko ${upstream.status}`);
+      const json = await upstream.json() as Record<string, { usd: number }>;
+      const data = {
+        bch: json["bitcoin-cash"]?.usd ?? 0,
+        btc: json["bitcoin"]?.usd ?? 0,
+      };
+      priceCache = { data, at: now };
+      res.json(data);
+    } catch {
+      if (priceCache) return res.json(priceCache.data);
+      res.status(503).json({ bch: 0, btc: 0 });
+    }
+  });
+
+  // ── Bug reports ────────────────────────────────────────────────────────────
+  app.post("/api/bug-reports", async (req, res) => {
+    try {
+      const input = insertBugReportSchema.parse(req.body);
+      const { score, analysisNote, status } = analyzeBugReport(input.description, input.category);
+      const report = await storage.createBugReport({ ...input, score, analysisNote, status });
+      res.status(201).json({ ok: true, id: report.id, status, analysisNote });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ ok: false, message: err.errors[0].message });
+      }
+      res.status(500).json({ ok: false, message: "Failed to submit report" });
+    }
+  });
+
+  // ── Premium users ──────────────────────────────────────────────────────────
+
+  app.get("/api/premium/status/:alias", async (req, res) => {
+    try {
+      const { alias } = req.params;
+      const record = await storage.getPremiumByAlias(alias);
+      if (!record || record.status !== "active" || new Date(record.expiresAt) < new Date()) {
+        return res.json({ isPremium: false });
+      }
+      return res.json({
+        isPremium: true,
+        email: record.email,
+        expiresAt: record.expiresAt,
+      });
+    } catch {
+      res.status(500).json({ isPremium: false });
+    }
+  });
+
+  // Check whether an email belongs to an active Premium account (for alias validation)
+  app.get("/api/premium/check-email/:email", async (req, res) => {
+    try {
+      const email = decodeURIComponent(req.params.email);
+      const record = await storage.getPremiumByEmail(email);
+      const isPremium = !!(record && record.status === "active" && new Date(record.expiresAt) > new Date());
+      return res.json({ isPremium });
+    } catch {
+      res.status(500).json({ isPremium: false });
+    }
+  });
+
+  // Send a 6-digit verification code to the given email
+  app.post("/api/premium/send-code", async (req, res) => {
+    try {
+      const { email } = z.object({ email: z.string().email() }).parse(req.body);
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      await storage.createVerificationCode(email, code);
+      await sendVerificationEmail(email, code);
+      return res.json({ ok: true });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ ok: false, message: err.errors[0].message });
+      }
+      console.error("send-code error:", err);
+      res.status(500).json({ ok: false, message: "Failed to send verification code" });
+    }
+  });
+
+  // Verify the code and then activate premium for the alias
+  const claimPremiumSchema = z.object({
+    alias: z.string().min(1),
+    email: z.string().email(),
+    code: z.string().length(6),
+    paymentNote: z.string().optional(),
+    paymentProof: z.string().optional(),
+  });
+
+  app.post("/api/premium/claim", async (req, res) => {
+    try {
+      const { alias, email, code, paymentNote, paymentProof } = claimPremiumSchema.parse(req.body);
+      const valid = await storage.verifyCode(email, code);
+      if (!valid) {
+        return res.status(400).json({ ok: false, message: "Invalid or expired verification code." });
+      }
+      const record = await storage.claimPremium(alias, email, paymentNote, paymentProof);
+      return res.status(201).json({ ok: true, status: record.status, expiresAt: record.expiresAt });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ ok: false, message: err.errors[0].message });
+      }
+      res.status(500).json({ ok: false, message: "Failed to submit premium request" });
+    }
+  });
+
+  // ── Admin — protected by ADMIN_KEY env secret ──────────────────────────────
+  function adminAuth(req: any, res: any, next: any) {
+    const key = process.env.ADMIN_KEY;
+    if (!key) return res.status(503).json({ message: "Admin key not configured" });
+    if (req.headers["x-admin-key"] !== key) return res.status(401).json({ message: "Unauthorized" });
+    next();
+  }
+
+  app.get("/api/admin/premium", adminAuth, async (_req, res) => {
+    try {
+      const users = await storage.listPremiumUsers();
+      res.json(users);
+    } catch {
+      res.status(500).json({ message: "Failed to list premium users" });
+    }
+  });
+
+  app.post("/api/admin/premium/:id/approve", adminAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+      const record = await storage.approvePremium(id);
+      if (!record) return res.status(404).json({ message: "Not found" });
+      try {
+        await sendApprovalEmail(record.email, record.alias, record.expiresAt);
+      } catch (emailErr) {
+        console.error("[admin] Approval email failed:", emailErr);
+      }
+      res.json({ ok: true, record });
+    } catch {
+      res.status(500).json({ message: "Failed to approve" });
+    }
+  });
+
+  app.post("/api/admin/premium/:id/revoke", adminAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+      const record = await storage.revokePremium(id);
+      if (!record) return res.status(404).json({ message: "Not found" });
+      res.json({ ok: true, record });
+    } catch {
+      res.status(500).json({ message: "Failed to revoke" });
+    }
+  });
+
   return httpServer;
+}
+
+function analyzeBugReport(description: string, category: string): { score: number; analysisNote: string; status: string } {
+  const text = description.trim().toLowerCase();
+  let score = 0;
+  const notes: string[] = [];
+
+  // Length check
+  if (text.length >= 80) { score += 25; }
+  else if (text.length >= 40) { score += 15; }
+  else { score += 5; notes.push("description is quite short"); }
+
+  // Gibberish check: high ratio of repeated chars or non-word chars
+  const nonWordRatio = (text.match(/[^a-z0-9\s.,!?'-]/g) ?? []).length / text.length;
+  if (nonWordRatio > 0.35) { score -= 20; notes.push("description contains many non-standard characters"); }
+
+  // Repeated char runs (e.g. "aaaaaaa")
+  if (/(.)\1{5,}/.test(text)) { score -= 20; notes.push("description appears to contain repetitive characters"); }
+
+  // Unique word count — more distinct words = more meaningful
+  const words = text.split(/\s+/).filter(Boolean);
+  const uniqueWords = new Set(words).size;
+  if (uniqueWords >= 10) score += 20;
+  else if (uniqueWords >= 5) score += 10;
+  else { notes.push("description has very few distinct words"); }
+
+  // Category-relevant keyword signals
+  const bugKeywords = ["error", "broken", "crash", "fail", "doesn't work", "not working", "bug", "glitch", "wrong", "issue", "problem", "stuck", "freeze"];
+  const uxKeywords = ["confusing", "unclear", "hard to", "difficult", "improve", "suggest", "interface", "ui", "layout", "button", "tap", "click"];
+  const featureKeywords = ["add", "would be nice", "feature", "support", "allow", "enable", "request", "want", "could", "should"];
+
+  const relevantKw = category === "bug" ? bugKeywords : category === "ux" ? uxKeywords : category === "feature" ? featureKeywords : [...bugKeywords, ...uxKeywords];
+  const matchedKw = relevantKw.filter((kw) => text.includes(kw));
+  if (matchedKw.length >= 2) { score += 25; }
+  else if (matchedKw.length === 1) { score += 12; }
+  else { notes.push("description doesn't mention any common issue keywords"); }
+
+  // Sentence structure signal: contains at least one sentence-ending punctuation
+  if (/[.!?]/.test(text)) score += 10;
+
+  // Cap score
+  score = Math.max(0, Math.min(100, score));
+
+  let status: string;
+  let notePrefix: string;
+  if (score >= 55) {
+    status = "likely_valid";
+    notePrefix = "Report appears detailed and relevant.";
+  } else if (score >= 30) {
+    status = "needs_review";
+    notePrefix = "Report needs manual review.";
+  } else {
+    status = "likely_invalid";
+    notePrefix = "Report may not contain actionable information.";
+  }
+
+  const analysisNote = notes.length > 0
+    ? `${notePrefix} Notes: ${notes.join("; ")}.`
+    : notePrefix;
+
+  return { score, analysisNote, status };
 }
 
 async function seedDatabase() {

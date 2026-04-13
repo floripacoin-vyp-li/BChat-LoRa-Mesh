@@ -111,3 +111,19 @@
   pointer-events: none;
   opacity: 0.4;
 }
+
+@media print {
+  body * {
+    visibility: hidden !important;
+    display: none !important;
+  }
+  body::after {
+    content: "This content is protected and cannot be printed.";
+    visibility: visible !important;
+    display: block !important;
+    font-family: monospace;
+    font-size: 14px;
+    text-align: center;
+    margin-top: 40vh;
+  }
+}

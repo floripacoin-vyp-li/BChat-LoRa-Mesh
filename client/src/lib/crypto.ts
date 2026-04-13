@@ -1,4 +1,30 @@
 export const BCB_DM_PREFIX = "BCB-DM:";
+export const BCB_CREQ_PREFIX = "BCB-CREQ:v1:";
+
+export interface ContactRequest {
+  fromAlias: string;
+  toAlias: string;
+  publicKeyBase64: string;
+}
+
+export function formatContactRequest(fromAlias: string, toAlias: string, publicKeyBase64: string): string {
+  return `${BCB_CREQ_PREFIX}${fromAlias}:${toAlias}:${publicKeyBase64}`;
+}
+
+export function parseContactRequest(content: string): ContactRequest | null {
+  if (!content.startsWith(BCB_CREQ_PREFIX)) return null;
+  const rest = content.slice(BCB_CREQ_PREFIX.length);
+  const first = rest.indexOf(":");
+  if (first === -1) return null;
+  const fromAlias = rest.slice(0, first);
+  const rest2 = rest.slice(first + 1);
+  const second = rest2.indexOf(":");
+  if (second === -1) return null;
+  const toAlias = rest2.slice(0, second);
+  const publicKeyBase64 = rest2.slice(second + 1);
+  if (!fromAlias || !toAlias || !publicKeyBase64) return null;
+  return { fromAlias, toAlias, publicKeyBase64 };
+}
 
 // ── IndexedDB helpers ──────────────────────────────────────────────────────────
 
@@ -71,6 +97,52 @@ export function getMyPublicKeyBase64(): string | null {
 
 export function getMyPrivateKey(): CryptoKey | null {
   return _privateKey;
+}
+
+// ── Key pair export / import (for wallet backup) ──────────────────────────────
+
+export async function exportKeyPair(): Promise<{ privateKey: string; publicKey: string } | null> {
+  try {
+    const db = await openDB();
+    const privKey = await new Promise<CryptoKey | null>((resolve, reject) => {
+      const tx = db.transaction("keys", "readonly");
+      const req = tx.objectStore("keys").get("ecdh-private");
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror = () => reject(req.error);
+    });
+    const pubKey = await new Promise<CryptoKey | null>((resolve, reject) => {
+      const tx = db.transaction("keys", "readonly");
+      const req = tx.objectStore("keys").get("ecdh-public");
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror = () => reject(req.error);
+    });
+    if (!privKey || !pubKey) return null;
+    const [pkcs8, spki] = await Promise.all([
+      crypto.subtle.exportKey("pkcs8", privKey),
+      crypto.subtle.exportKey("spki", pubKey),
+    ]);
+    return {
+      privateKey: btoa(String.fromCharCode(...new Uint8Array(pkcs8))),
+      publicKey:  btoa(String.fromCharCode(...new Uint8Array(spki))),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function importKeyPairFromBackup(privateBase64: string, publicBase64: string): Promise<void> {
+  const pkcs8 = Uint8Array.from(atob(privateBase64), (c) => c.charCodeAt(0));
+  const spki  = Uint8Array.from(atob(publicBase64),  (c) => c.charCodeAt(0));
+  const [privateKey, publicKey] = await Promise.all([
+    crypto.subtle.importKey("pkcs8", pkcs8, { name: "ECDH", namedCurve: "P-256" }, true, ["deriveKey"]),
+    crypto.subtle.importKey("spki",  spki,  { name: "ECDH", namedCurve: "P-256" }, true, []),
+  ]);
+  await Promise.all([
+    storeKey("ecdh-private", privateKey),
+    storeKey("ecdh-public",  publicKey),
+  ]);
+  _privateKey      = privateKey;
+  _publicKeyBase64 = publicBase64;
 }
 
 // ── Contact key operations ─────────────────────────────────────────────────────

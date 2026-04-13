@@ -1,8 +1,10 @@
-import { Activity, Bluetooth, Check, Clipboard, Cpu, LogOut, Power, QrCode, ShieldCheck, Usb } from "lucide-react";
+import { Activity, Bluetooth, BookOpen, Check, Clipboard, Cpu, LogOut, Power, QrCode, ShieldCheck, Usb } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
+
 import { useBLE } from "@/hooks/use-ble";
 import { useSerial } from "@/hooks/use-serial";
+import { getMyPublicKeyBase64 } from "@/lib/crypto";
 import { QRCodeDisplay } from "@/components/qr-code";
 import {
   AlertDialog,
@@ -40,7 +42,7 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, 
   const [qrOpen, setQrOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [localUrl, setLocalUrl] = useState<string | null>(null);
-  const currentUrl = typeof window !== "undefined" ? window.location.href : "";
+  const SHARE_URL = "https://vyp.li/bchat";
 
   const handleOpenQr = () => {
     setQrOpen(true);
@@ -57,18 +59,27 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, 
     });
   };
 
-  const showLocalQr = localUrl && localUrl !== currentUrl;
+  const showLocalQr = !!localUrl;
 
   return (
     <header className="glass-panel border-b-0 rounded-t-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 relative overflow-hidden">
       <div className="absolute inset-0 scanlines pointer-events-none opacity-20" />
 
       <div className="flex items-center gap-3 relative z-10">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-card to-background border border-white/10 flex items-center justify-center shadow-lg">
-          <Activity className="text-primary animate-pulse" size={20} />
-        </div>
+        <Link href="/tutorial">
+          <button
+            className="w-10 h-10 rounded-xl bg-gradient-to-br from-card to-background border border-white/10 flex items-center justify-center shadow-lg hover:border-primary/40 hover:shadow-primary/10 transition-colors"
+            title="Getting started guide"
+            data-testid="button-open-tutorial"
+          >
+            <Activity className="text-primary animate-pulse" size={20} />
+          </button>
+        </Link>
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+          <h1
+            className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2 select-none"
+            data-testid="title-bchat"
+          >
             BChat{" "}
             <span className={`font-mono text-xs px-2 py-0.5 rounded-full border transition-colors duration-500 ${
               isOnline
@@ -87,6 +98,17 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, 
       </div>
 
       <div className="flex items-center gap-3 w-full sm:w-auto relative z-10 flex-wrap">
+        <Link href="/tutorial">
+          <button
+            className="px-3 py-2 rounded-lg border border-white/10 text-muted-foreground hover:bg-primary/10 hover:border-primary/30 hover:text-primary flex items-center gap-1.5 text-xs font-mono transition-colors"
+            title="Getting started guide"
+            data-testid="link-tutorial"
+          >
+            <BookOpen size={12} />
+            <span className="hidden sm:inline">Guide</span>
+          </button>
+        </Link>
+
         <Link href="/firmware">
           <button
             className="px-3 py-2 rounded-lg border border-white/10 text-muted-foreground hover:bg-primary/10 hover:border-primary/30 hover:text-primary flex items-center gap-1.5 text-xs font-mono transition-colors"
@@ -146,40 +168,37 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, 
                   <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/50">
                     Internet URL
                   </span>
-                  <QRCodeDisplay value={currentUrl} size={140} />
+                  <QRCodeDisplay value={SHARE_URL} size={140} />
                   <p className="text-[10px] font-mono text-muted-foreground/40 break-all text-center px-2" data-testid="text-share-url">
-                    {currentUrl}
+                    {SHARE_URL}
                   </p>
                   <button
-                    onClick={() => handleCopyUrl(currentUrl)}
+                    onClick={() => handleCopyUrl(SHARE_URL)}
                     className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary border border-white/10 hover:bg-primary/10 hover:border-primary/30 hover:text-primary text-xs font-mono transition-colors"
                     data-testid="button-copy-url"
                   >
-                    {copied === currentUrl ? <Check size={11} className="text-green-400" /> : <Clipboard size={11} />}
-                    {copied === currentUrl ? "Copied!" : "Copy"}
+                    {copied === SHARE_URL ? <Check size={11} className="text-green-400" /> : <Clipboard size={11} />}
+                    {copied === SHARE_URL ? "Copied!" : "Copy"}
                   </button>
                 </div>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-4 py-2">
                 <p className="text-xs text-muted-foreground text-center leading-relaxed">
-                  Share this link — other devices need internet access to open it
+                  Share this link to invite others to BChat
                 </p>
-                <QRCodeDisplay value={currentUrl} size={220} />
+                <QRCodeDisplay value={SHARE_URL} size={220} />
                 <p className="text-[10px] font-mono text-muted-foreground/60 break-all text-center px-2" data-testid="text-share-url">
-                  {currentUrl}
+                  {SHARE_URL}
                 </p>
                 <button
-                  onClick={() => handleCopyUrl(currentUrl)}
+                  onClick={() => handleCopyUrl(SHARE_URL)}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-white/10 hover:bg-primary/10 hover:border-primary/30 hover:text-primary text-xs font-mono transition-colors"
                   data-testid="button-copy-url"
                 >
-                  {copied === currentUrl ? <Check size={13} className="text-green-400" /> : <Clipboard size={13} />}
-                  {copied === currentUrl ? "Copied!" : "Copy URL"}
+                  {copied === SHARE_URL ? <Check size={13} className="text-green-400" /> : <Clipboard size={13} />}
+                  {copied === SHARE_URL ? "Copied!" : "Copy Link"}
                 </button>
-                <p className="text-[10px] font-mono text-muted-foreground/40 text-center leading-relaxed px-4">
-                  For offline LAN mode, run BCB on your own machine — the local IP QR will appear automatically
-                </p>
               </div>
             )}
           </DialogContent>
@@ -215,17 +234,46 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, 
             <AlertDialogHeader>
               <AlertDialogTitle>Reset your identity?</AlertDialogTitle>
               <AlertDialogDescription className="text-muted-foreground">
-                This will clear your alias, contacts, and encryption keys from this device. You will be asked to choose a new alias on next load. This cannot be undone.
+                This will clear your alias, contacts, encryption keys, BCH address, and all chat messages from this device and the server. You will be asked to choose a new alias on next load. This cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel className="bg-secondary text-secondary-foreground border-white/10 hover:bg-white/5">Cancel</AlertDialogCancel>
               <AlertDialogAction
                 onClick={async () => {
+                  const alias = localStorage.getItem("bcb-alias");
+                  const publicKey = getMyPublicKeyBase64();
+                  // Delete this user's messages from the server
+                  try {
+                    const url = alias
+                      ? `/api/messages?sender=${encodeURIComponent(alias)}`
+                      : "/api/messages";
+                    await fetch(url, { method: "DELETE" });
+                  } catch {}
+                  // Free the alias so others can claim it
+                  if (alias && publicKey) {
+                    try {
+                      await fetch(`/api/users/${encodeURIComponent(alias)}`, {
+                        method: "DELETE",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ publicKey }),
+                      });
+                    } catch {}
+                  }
+                  // Clear local storage
                   localStorage.removeItem("bcb-alias");
                   localStorage.removeItem("bcb-contacts");
+                  localStorage.removeItem("bcb-bch-address");
+                  // Delete ECDH key DB
                   await new Promise<void>((resolve) => {
                     const req = indexedDB.deleteDatabase("bcb-crypto");
+                    req.onsuccess = () => resolve();
+                    req.onerror = () => resolve();
+                    req.onblocked = () => resolve();
+                  });
+                  // Delete BCH key DB
+                  await new Promise<void>((resolve) => {
+                    const req = indexedDB.deleteDatabase("bcb-bch");
                     req.onsuccess = () => resolve();
                     req.onerror = () => resolve();
                     req.onblocked = () => resolve();
@@ -289,6 +337,7 @@ export function DashboardHeader({ ble, serial, isOnline, isConnected, onOpenDm, 
           </div>
         )}
       </div>
+
     </header>
   );
 }
