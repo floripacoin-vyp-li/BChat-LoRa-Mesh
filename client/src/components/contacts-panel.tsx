@@ -636,7 +636,7 @@ export function ContactsPanel({
           </div>
 
           {/* ── Premium Verified ───────────────────────────────────────── */}
-          <div>
+          <div className="!mt-2">
             <div className="flex items-center gap-2 mb-2">
               <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60">
                 Premium Verified
