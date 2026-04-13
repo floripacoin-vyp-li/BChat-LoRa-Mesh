@@ -718,39 +718,43 @@ export function ContactsPanel({
             ) : (
               /* ── Go-premium card ── */
               <div className="bg-background/50 border border-white/10 rounded-xl p-3 space-y-3">
-                <div className="flex items-start gap-2">
-                  <Star size={13} className="text-amber-400 mt-0.5 flex-shrink-0" />
-                  <p className="text-[11px] font-mono text-muted-foreground/70 leading-relaxed">
-                    Pay <strong className="text-amber-300">$10 / year</strong> in sats to unlock wallet backup and a verified badge.
-                  </p>
-                </div>
+                {!premiumSubmitted && premiumStep === "form" && (
+                  <>
+                    <div className="flex items-start gap-2">
+                      <Star size={13} className="text-amber-400 mt-0.5 flex-shrink-0" />
+                      <p className="text-[11px] font-mono text-muted-foreground/70 leading-relaxed">
+                        Pay <strong className="text-amber-300">$10 / year</strong> in sats to unlock wallet backup and a verified badge.
+                      </p>
+                    </div>
 
-                {/* Payment target */}
-                <div className="space-y-1.5">
-                  <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">Pay to</p>
-                  <div className="flex items-center gap-2 bg-black/20 border border-white/10 rounded-lg px-2.5 py-2">
-                    <Zap size={11} className="text-amber-400 flex-shrink-0" />
-                    <span className="flex-1 text-[11px] font-mono text-amber-300 break-all">{lightningAddress}</span>
-                    <button
-                      onClick={handleCopyLightning}
-                      className="text-muted-foreground/50 hover:text-foreground transition-colors ml-1 flex-shrink-0"
-                      title="Copy Lightning address"
-                      data-testid="button-copy-lightning-address"
-                    >
-                      {copied ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
-                    </button>
-                  </div>
-                  {requiredSats && (
-                    <p className="text-[10px] font-mono text-muted-foreground/50 pl-1">
-                      ≈ {requiredSats.toLocaleString()} sats ($10 USD)
-                    </p>
-                  )}
-                </div>
+                    {/* Payment target */}
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">Pay to</p>
+                      <div className="flex items-center gap-2 bg-black/20 border border-white/10 rounded-lg px-2.5 py-2">
+                        <Zap size={11} className="text-amber-400 flex-shrink-0" />
+                        <span className="flex-1 text-[11px] font-mono text-amber-300 break-all">{lightningAddress}</span>
+                        <button
+                          onClick={handleCopyLightning}
+                          className="text-muted-foreground/50 hover:text-foreground transition-colors ml-1 flex-shrink-0"
+                          title="Copy Lightning address"
+                          data-testid="button-copy-lightning-address"
+                        >
+                          {copied ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
+                        </button>
+                      </div>
+                      {requiredSats && (
+                        <p className="text-[10px] font-mono text-muted-foreground/50 pl-1">
+                          ≈ {requiredSats.toLocaleString()} sats ($10 USD)
+                        </p>
+                      )}
+                    </div>
 
-                {/* QR code for Lightning URI */}
-                <div className="flex justify-center py-1">
-                  <QRCodeDisplay value={lightningUri} size={140} />
-                </div>
+                    {/* QR code for Lightning URI */}
+                    <div className="flex justify-center py-1">
+                      <QRCodeDisplay value={lightningUri} size={140} />
+                    </div>
+                  </>
+                )}
 
                 {/* Two-step activation form */}
                 {premiumSubmitted ? (
