@@ -277,7 +277,7 @@ export class DatabaseStorage implements IStorage {
   async reclaimAlias(alias: string, publicKey: string): Promise<void> {
     await db
       .update(users)
-      .set({ publicKey })
+      .set({ publicKey, freedAt: null, registeredAt: new Date() })
       .where(sql`lower(${users.alias}) = lower(${alias})`);
   }
 
