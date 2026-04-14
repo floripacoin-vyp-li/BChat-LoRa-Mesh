@@ -34,19 +34,18 @@ export function useSendMessage() {
     mutationFn: async (message: MessageInput) => {
       const validated = api.messages.create.input.parse(message);
       const isUserMessage = validated.sender !== "system" && validated.sender !== "node";
-
-      // Fire-and-forget BLE/Serial write — never awaited so it never locks the UI
       const hasRadio = isUserMessage && !!(window as any).meshtasticSend;
-      if (hasRadio) {
-        const bytes = buildTextToRadio(`${validated.sender}: ${validated.content}`);
-        Promise.resolve((window as any).meshtasticSend(bytes)).catch((e: unknown) =>
-          console.warn("Mesh: radio write failed:", e)
-        );
-        console.log("Mesh: dispatched via", (window as any)._meshtasticTransport);
-      }
 
-      // Offline: store locally and return immediately
+      // Offline: fire-and-forget direct radio write + store locally.
+      // The relay doesn't run offline so the direct write is the only TX path.
       if (!serverReachable) {
+        if (hasRadio) {
+          const bytes = buildTextToRadio(`${validated.sender}: ${validated.content}`);
+          Promise.resolve((window as any).meshtasticSend(bytes)).catch((e: unknown) =>
+            console.warn("Mesh: radio write failed (offline):", e)
+          );
+          console.log("Mesh: dispatched offline via", (window as any)._meshtasticTransport);
+        }
         const localMsg: Message = {
           id: Date.now(),
           sender: validated.sender,
@@ -64,12 +63,15 @@ export function useSendMessage() {
         return localMsg;
       }
 
-      // Online: POST to server
+      // Online: POST to server with transmitted=false so the relay picks it up
+      // reliably via its polling + atomic-claim mechanism (2 s poll interval).
+      // A direct fire-and-forget write here would mark the message as transmitted
+      // even if the BLE GATT write silently failed, causing the relay to skip it.
       try {
         const res = await fetch(api.messages.create.path, {
           method: api.messages.create.method,
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...validated, transmitted: hasRadio }),
+          body: JSON.stringify({ ...validated, transmitted: false }),
           credentials: "include",
         });
 

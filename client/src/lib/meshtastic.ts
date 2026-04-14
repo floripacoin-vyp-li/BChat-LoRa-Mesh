@@ -164,9 +164,17 @@ export function buildWantConfig(): Uint8Array {
   return toBinary(Mesh.ToRadioSchema, toRadio);
 }
 
+function randomPacketId(): number {
+  // Meshtastic firmware may silently drop packets with id = 0; always use a
+  // random non-zero 32-bit value as official clients do.
+  return (Math.random() * 0xffffffff >>> 0) || 1;
+}
+
 export function buildTextToRadio(text: string): Uint8Array {
   const packet = create(Mesh.MeshPacketSchema, {
     to: 0xffffffff,
+    id: randomPacketId(),
+    hopLimit: 3,
     wantAck: false,
     payloadVariant: {
       case: "decoded",
@@ -185,6 +193,8 @@ export function buildTextToRadio(text: string): Uint8Array {
 export function buildBitchatToRadio(bytes: Uint8Array): Uint8Array {
   const packet = create(Mesh.MeshPacketSchema, {
     to: 0xffffffff,
+    id: randomPacketId(),
+    hopLimit: 3,
     wantAck: false,
     payloadVariant: {
       case: "decoded",
