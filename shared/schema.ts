@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean, uniqueIndex, integer, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, uniqueIndex, integer, varchar, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -98,6 +98,7 @@ export const paymentConfig = pgTable("payment_config", {
   bchAddress: text("bch_address").notNull().default(""),
   btcAddress: text("btc_address").notNull().default(""),
   liquidAddress: text("liquid_address").notNull().default(""),
+  premiumPriceUsd: real("premium_price_usd").notNull().default(10),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

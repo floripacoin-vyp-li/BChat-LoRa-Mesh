@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Shield, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, LogOut, RefreshCw, Settings, Save, Loader2, Zap, Bitcoin, Waves } from "lucide-react";
+import { Shield, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, LogOut, RefreshCw, Settings, Save, Loader2, Zap, Bitcoin, Waves, TrendingUp, DollarSign, Users, Calendar } from "lucide-react";
 import type { PremiumUser, PaymentConfig } from "@shared/schema";
 
 type Filter = "all" | "pending" | "active" | "revoked";
@@ -40,12 +40,14 @@ function PaymentConfigSection({
   bch, onBch,
   btc, onBtc,
   liquid, onLiquid,
+  priceUsd, onPriceUsd,
   onSave, isPending, isSaved,
 }: {
   lightning: string; onLightning: (v: string) => void;
   bch: string; onBch: (v: string) => void;
   btc: string; onBtc: (v: string) => void;
   liquid: string; onLiquid: (v: string) => void;
+  priceUsd: string; onPriceUsd: (v: string) => void;
   onSave: () => void; isPending: boolean; isSaved: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -65,7 +67,28 @@ function PaymentConfigSection({
       </button>
 
       {open && (
-        <div className="border-t border-border/30 px-4 py-4 space-y-3 bg-background/30">
+        <div className="border-t border-border/30 px-4 py-4 space-y-4 bg-background/30">
+          {/* Premium price */}
+          <div className="flex items-center gap-4 p-3 bg-amber-500/5 border border-amber-500/15 rounded-lg">
+            <DollarSign size={14} className="text-amber-400 flex-shrink-0" />
+            <div className="flex-1 space-y-1">
+              <label className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">Premium price (USD / year)</label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground/40 font-mono">$</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  value={priceUsd}
+                  onChange={(e) => onPriceUsd(e.target.value)}
+                  className="w-28 bg-background/50 border border-white/10 rounded-lg px-3 py-1.5 text-sm font-mono font-semibold text-amber-300 placeholder:text-muted-foreground/30 focus:outline-none focus:border-amber-400/40"
+                  data-testid="input-premium-price"
+                />
+                <span className="text-[10px] text-muted-foreground/40 font-mono">per year</span>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">
@@ -143,6 +166,178 @@ function PaymentConfigSection({
   );
 }
 
+type FinancialStats = {
+  priceUsd: number;
+  thisWeek: { count: number; revenue: number };
+  thisMonth: { count: number; revenue: number };
+  thisYear: { count: number; revenue: number };
+  allTime: { count: number; revenue: number };
+  recentApprovals: PremiumUser[];
+};
+
+function FinancialSection({ adminKey }: { adminKey: string }) {
+  const [open, setOpen] = useState(true);
+  const [period, setPeriod] = useState<"thisWeek" | "thisMonth" | "thisYear" | "allTime">("thisMonth");
+
+  const { data: stats, isLoading } = useQuery<FinancialStats>({
+    queryKey: ["/api/admin/financial-stats", adminKey],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/financial-stats", { headers: { "x-admin-key": adminKey } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!adminKey,
+    refetchInterval: 60_000,
+  });
+
+  const PERIODS: { key: "thisWeek" | "thisMonth" | "thisYear" | "allTime"; label: string }[] = [
+    { key: "thisWeek",  label: "Week"  },
+    { key: "thisMonth", label: "Month" },
+    { key: "thisYear",  label: "Year"  },
+    { key: "allTime",   label: "All"   },
+  ];
+
+  const fmtUsd = (v: number) =>
+    v.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
+
+  const approvalDate = (u: PremiumUser) => {
+    if (!u.expiresAt) return "—";
+    const d = new Date(u.expiresAt);
+    d.setFullYear(d.getFullYear() - 1);
+    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  };
+
+  const currentStats = stats ? stats[period] : null;
+
+  return (
+    <div className="bg-card border border-border/40 rounded-xl overflow-hidden" data-testid="financial-section">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/3 transition-colors"
+        data-testid="button-toggle-financial"
+      >
+        <div className="flex items-center gap-2">
+          <TrendingUp size={14} className="text-emerald-400" />
+          <span className="text-sm font-semibold text-foreground">Financial Overview</span>
+          {stats && (
+            <span className="text-[10px] text-muted-foreground/50">
+              — {stats.allTime.count} activated · current price {fmtUsd(stats.priceUsd)}/yr
+            </span>
+          )}
+        </div>
+        {open ? <ChevronUp size={13} className="text-muted-foreground/40" /> : <ChevronDown size={13} className="text-muted-foreground/40" />}
+      </button>
+
+      {open && (
+        <div className="border-t border-border/30 px-4 py-4 space-y-4 bg-background/30">
+
+          {isLoading && <p className="text-xs text-muted-foreground/40 text-center py-4">Loading stats…</p>}
+
+          {stats && (
+            <>
+              {/* Period selector */}
+              <div className="flex items-center gap-1" data-testid="financial-period-tabs">
+                {PERIODS.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => setPeriod(key)}
+                    className={`px-3 py-1 rounded-lg text-[11px] font-mono font-semibold transition-colors ${
+                      period === key
+                        ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                        : "text-muted-foreground/50 hover:text-foreground hover:bg-white/5 border border-transparent"
+                    }`}
+                    data-testid={`tab-period-${key}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Stats cards */}
+              {currentStats && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-background/40 border border-border/30 rounded-lg px-4 py-3 space-y-1" data-testid="stat-activations">
+                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50 font-mono uppercase tracking-wide">
+                      <Users size={10} className="text-emerald-400" /> Activations
+                    </div>
+                    <div className="text-2xl font-semibold text-foreground font-mono" data-testid="stat-activations-count">
+                      {currentStats.count}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground/40 font-mono">
+                      {PERIODS.find(p => p.key === period)?.label.toLowerCase()} period
+                    </div>
+                  </div>
+                  <div className="bg-background/40 border border-border/30 rounded-lg px-4 py-3 space-y-1" data-testid="stat-revenue">
+                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50 font-mono uppercase tracking-wide">
+                      <DollarSign size={10} className="text-emerald-400" /> Est. Revenue
+                    </div>
+                    <div className="text-2xl font-semibold text-emerald-400 font-mono" data-testid="stat-revenue-amount">
+                      {fmtUsd(currentStats.revenue)}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground/40 font-mono">
+                      @ {fmtUsd(stats.priceUsd)}/yr each
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Summary row — all periods at a glance */}
+              <div className="grid grid-cols-4 gap-2 pt-1">
+                {PERIODS.map(({ key, label }) => {
+                  const s = stats[key];
+                  return (
+                    <div
+                      key={key}
+                      className="bg-background/30 border border-border/20 rounded-lg px-2 py-2 text-center"
+                      data-testid={`summary-${key}`}
+                    >
+                      <div className="flex items-center justify-center gap-1 text-[9px] text-muted-foreground/40 font-mono uppercase tracking-wide mb-1">
+                        <Calendar size={8} /> {label}
+                      </div>
+                      <div className="text-sm font-semibold text-foreground font-mono">{s.count}</div>
+                      <div className="text-[10px] text-emerald-400/70 font-mono">{fmtUsd(s.revenue)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Recent approvals */}
+              {stats.recentApprovals.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-wide">Recent approvals</p>
+                  <div className="space-y-1">
+                    {stats.recentApprovals.map((u) => (
+                      <div
+                        key={u.id}
+                        className="flex items-center gap-3 px-3 py-2 bg-background/40 border border-border/20 rounded-lg"
+                        data-testid={`recent-approval-${u.id}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-foreground font-mono truncate">{u.alias}</span>
+                            {u.status === "revoked" && (
+                              <span className="text-[9px] text-destructive/60 font-mono">(revoked)</span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground/40 font-mono truncate">{u.email}</div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <div className="text-[10px] text-emerald-400 font-mono">{fmtUsd(stats.priceUsd)}</div>
+                          <div className="text-[9px] text-muted-foreground/30 font-mono">{approvalDate(u)}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [adminKey, setAdminKey] = useState(() => sessionStorage.getItem("bcb-admin-key") ?? "");
   const [keyInput, setKeyInput] = useState("");
@@ -154,6 +349,7 @@ export default function AdminPage() {
   const [pcBch, setPcBch] = useState("");
   const [pcBtc, setPcBtc] = useState("");
   const [pcLiquid, setPcLiquid] = useState("");
+  const [pcPriceUsd, setPcPriceUsd] = useState("10");
 
   const authenticated = !!adminKey;
   const qc = useQueryClient();
@@ -207,6 +403,7 @@ export default function AdminPage() {
     setPcBch(paymentConfig.bchAddress ?? "");
     setPcBtc(paymentConfig.btcAddress ?? "");
     setPcLiquid(paymentConfig.liquidAddress ?? "");
+    setPcPriceUsd(String(paymentConfig.premiumPriceUsd ?? 10));
   }, [paymentConfig]);
 
   const savePaymentConfig = useMutation({
@@ -214,7 +411,7 @@ export default function AdminPage() {
       const res = await fetch("/api/admin/payment-config", {
         method: "PUT",
         headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ lightningAddress: pcLightning, bchAddress: pcBch, btcAddress: pcBtc, liquidAddress: pcLiquid }),
+        body: JSON.stringify({ lightningAddress: pcLightning, bchAddress: pcBch, btcAddress: pcBtc, liquidAddress: pcLiquid, premiumPriceUsd: Number(pcPriceUsd) || 10 }),
       });
       if (!res.ok) throw new Error("Failed to save");
       return res.json();
@@ -315,12 +512,16 @@ export default function AdminPage() {
 
       <div className="max-w-4xl mx-auto p-4 space-y-4">
 
+        {/* Financial Overview */}
+        <FinancialSection adminKey={adminKey} />
+
         {/* Payment Config */}
         <PaymentConfigSection
           lightning={pcLightning} onLightning={setPcLightning}
           bch={pcBch} onBch={setPcBch}
           btc={pcBtc} onBtc={setPcBtc}
           liquid={pcLiquid} onLiquid={setPcLiquid}
+          priceUsd={pcPriceUsd} onPriceUsd={setPcPriceUsd}
           onSave={() => savePaymentConfig.mutate()}
           isPending={savePaymentConfig.isPending}
           isSaved={paymentSaved}

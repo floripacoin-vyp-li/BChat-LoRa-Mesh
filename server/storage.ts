@@ -14,7 +14,7 @@ import {
   type PremiumUser,
   type PaymentConfig,
 } from "@shared/schema";
-import { eq, asc, gt, and, notInArray, isNull, lt, sql } from "drizzle-orm";
+import { eq, asc, gt, gte, and, notInArray, isNull, lt, sql, desc } from "drizzle-orm";
 
 export interface IStorage {
   getMessages(): Promise<Message[]>;
@@ -42,7 +42,14 @@ export interface IStorage {
   createVerificationCode(email: string, code: string): Promise<void>;
   verifyCode(email: string, code: string): Promise<boolean>;
   getPaymentConfig(): Promise<PaymentConfig | null>;
-  upsertPaymentConfig(data: { lightningAddress: string; bchAddress: string; btcAddress: string; liquidAddress: string }): Promise<PaymentConfig>;
+  upsertPaymentConfig(data: { lightningAddress: string; bchAddress: string; btcAddress: string; liquidAddress: string; premiumPriceUsd: number }): Promise<PaymentConfig>;
+  getFinancialStats(premiumPriceUsd: number): Promise<{
+    thisWeek: { count: number; revenue: number };
+    thisMonth: { count: number; revenue: number };
+    thisYear: { count: number; revenue: number };
+    allTime: { count: number; revenue: number };
+    recentApprovals: PremiumUser[];
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -320,7 +327,7 @@ export class DatabaseStorage implements IStorage {
     return row ?? null;
   }
 
-  async upsertPaymentConfig(data: { lightningAddress: string; bchAddress: string; btcAddress: string; liquidAddress: string }): Promise<PaymentConfig> {
+  async upsertPaymentConfig(data: { lightningAddress: string; bchAddress: string; btcAddress: string; liquidAddress: string; premiumPriceUsd: number }): Promise<PaymentConfig> {
     const [existing] = await db.select().from(paymentConfig).where(eq(paymentConfig.id, 1)).limit(1);
     if (existing) {
       const [updated] = await db
@@ -332,6 +339,52 @@ export class DatabaseStorage implements IStorage {
     }
     const [created] = await db.insert(paymentConfig).values({ id: 1, ...data }).returning();
     return created;
+  }
+
+  async getFinancialStats(premiumPriceUsd: number): Promise<{
+    thisWeek: { count: number; revenue: number };
+    thisMonth: { count: number; revenue: number };
+    thisYear: { count: number; revenue: number };
+    allTime: { count: number; revenue: number };
+    recentApprovals: PremiumUser[];
+  }> {
+    const now = new Date();
+    // Approval date is inferred as expiresAt minus 1 year (set when admin approves)
+    const approvalDateExpr = sql<Date>`(${premiumUsers.expiresAt} - interval '1 year')`;
+
+    const weekAgo  = new Date(now.getTime() - 7  * 24 * 60 * 60 * 1000);
+    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const yearAgo  = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+
+    const countWhere = (since: Date) =>
+      and(
+        sql`${approvalDateExpr} >= ${since}`,
+        sql`${premiumUsers.status} IN ('active', 'revoked')`
+      );
+
+    const [wk] = await db.select({ count: sql<number>`count(*)::int` }).from(premiumUsers).where(countWhere(weekAgo));
+    const [mo] = await db.select({ count: sql<number>`count(*)::int` }).from(premiumUsers).where(countWhere(monthAgo));
+    const [yr] = await db.select({ count: sql<number>`count(*)::int` }).from(premiumUsers).where(countWhere(yearAgo));
+    const [at] = await db.select({ count: sql<number>`count(*)::int` }).from(premiumUsers).where(
+      sql`${premiumUsers.status} IN ('active', 'revoked')`
+    );
+
+    const toStats = (count: number) => ({ count, revenue: count * premiumPriceUsd });
+
+    const recent = await db
+      .select()
+      .from(premiumUsers)
+      .where(sql`${premiumUsers.status} IN ('active', 'revoked')`)
+      .orderBy(desc(premiumUsers.expiresAt))
+      .limit(8);
+
+    return {
+      thisWeek:  toStats(wk?.count ?? 0),
+      thisMonth: toStats(mo?.count ?? 0),
+      thisYear:  toStats(yr?.count ?? 0),
+      allTime:   toStats(at?.count ?? 0),
+      recentApprovals: recent,
+    };
   }
 
 }

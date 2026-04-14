@@ -559,7 +559,7 @@ export async function registerRoutes(
   app.get("/api/config/payment", async (_req, res) => {
     try {
       const config = await storage.getPaymentConfig();
-      res.json(config ?? { lightningAddress: "", bchAddress: "", btcAddress: "", liquidAddress: "" });
+      res.json(config ?? { lightningAddress: "", bchAddress: "", btcAddress: "", liquidAddress: "", premiumPriceUsd: 10 });
     } catch {
       res.status(500).json({ message: "Failed to load payment config" });
     }
@@ -572,6 +572,7 @@ export async function registerRoutes(
         bchAddress: z.string().max(200),
         btcAddress: z.string().max(200),
         liquidAddress: z.string().max(200),
+        premiumPriceUsd: z.number().positive().max(10000),
       });
       const data = schema.parse(req.body);
       const config = await storage.upsertPaymentConfig(data);
@@ -579,6 +580,17 @@ export async function registerRoutes(
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       res.status(500).json({ message: "Failed to save payment config" });
+    }
+  });
+
+  app.get("/api/admin/financial-stats", adminAuth, async (req, res) => {
+    try {
+      const config = await storage.getPaymentConfig();
+      const priceUsd = config?.premiumPriceUsd ?? 10;
+      const stats = await storage.getFinancialStats(priceUsd);
+      res.json({ priceUsd, ...stats });
+    } catch {
+      res.status(500).json({ message: "Failed to load financial stats" });
     }
   });
 
