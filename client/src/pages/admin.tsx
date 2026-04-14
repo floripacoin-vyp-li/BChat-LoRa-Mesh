@@ -821,11 +821,10 @@ export default function AdminPage() {
                 <div className="flex items-center gap-3 px-4 py-3">
                   <div className="flex-1 min-w-0 space-y-0.5">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm text-foreground font-semibold truncate" data-testid={`text-alias-${u.id}`}>{u.alias}</span>
+                      <span className="text-sm text-foreground font-semibold truncate" data-testid={`text-email-${u.id}`}>{u.email}</span>
                       {statusBadge(u.status)}
                     </div>
                     <div className="flex items-center gap-3 text-[10px] text-muted-foreground/50 flex-wrap">
-                      <span data-testid={`text-email-${u.id}`}>{u.email}</span>
                       {paymentMethodBadge(u.paymentMethod)}
                       {u.paymentAmount && (
                         <span className="font-mono text-amber-300/80" data-testid={`text-amount-${u.id}`}>≈ {u.paymentAmount}</span>
