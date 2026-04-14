@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { X, Trash2, MessageSquareLock, ChevronRight, QrCode, ScanLine, KeyRound, Search, Loader2, Wallet, Download, Upload, ShieldAlert, CheckCircle2, BadgeCheck, Star, Mail, Zap, Copy, Check } from "lucide-react";
+import { X, Trash2, MessageSquareLock, ChevronRight, QrCode, ScanLine, KeyRound, Search, Loader2, Wallet, Download, Upload, ShieldAlert, CheckCircle2, BadgeCheck, Star, Mail, Zap, Copy, Check, Bitcoin, Droplets } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { QRCodeDisplay } from "@/components/qr-code";
 import { QRScanner, buildQRKeyPayload, type ScannedKey } from "@/components/qr-scanner";
@@ -865,7 +865,15 @@ export function ContactsPanel({
                               )}
 
                               <div className="flex items-center gap-2 bg-black/20 border border-white/10 rounded-lg px-2.5 py-2">
-                                <Zap size={11} className="text-amber-400 flex-shrink-0" />
+                                {active.key === "lightning" ? (
+                                  <Zap size={11} className="text-amber-400 flex-shrink-0" />
+                                ) : active.key === "liquid" ? (
+                                  <Droplets size={11} className="text-sky-400 flex-shrink-0" />
+                                ) : active.key === "bch" ? (
+                                  <Bitcoin size={11} className="text-emerald-400 flex-shrink-0" />
+                                ) : (
+                                  <Bitcoin size={11} className="text-orange-400 flex-shrink-0" />
+                                )}
                                 <span className="flex-1 text-[11px] font-mono text-amber-300 break-all">{active.address}</span>
                                 <button
                                   onClick={() => { navigator.clipboard.writeText(active.address); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
