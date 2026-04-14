@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Shield, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, LogOut, RefreshCw, Settings, Save, Loader2, Zap, Bitcoin, Waves } from "lucide-react";
 import type { PremiumUser, PaymentConfig } from "@shared/schema";
@@ -173,7 +173,7 @@ export default function AdminPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/admin/premium", adminKey] }),
   });
 
-  useQuery<PaymentConfig>({
+  const { data: paymentConfig } = useQuery<PaymentConfig>({
     queryKey: ["/api/config/payment"],
     queryFn: async () => {
       const res = await fetch("/api/config/payment");
@@ -182,14 +182,15 @@ export default function AdminPage() {
     enabled: authenticated,
     staleTime: 0,
     refetchOnMount: true,
-    select: (data) => {
-      setPcLightning(data.lightningAddress ?? "");
-      setPcBch(data.bchAddress ?? "");
-      setPcBtc(data.btcAddress ?? "");
-      setPcLiquid(data.liquidAddress ?? "");
-      return data;
-    },
   });
+
+  useEffect(() => {
+    if (!paymentConfig) return;
+    setPcLightning(paymentConfig.lightningAddress ?? "");
+    setPcBch(paymentConfig.bchAddress ?? "");
+    setPcBtc(paymentConfig.btcAddress ?? "");
+    setPcLiquid(paymentConfig.liquidAddress ?? "");
+  }, [paymentConfig]);
 
   const savePaymentConfig = useMutation({
     mutationFn: async () => {
