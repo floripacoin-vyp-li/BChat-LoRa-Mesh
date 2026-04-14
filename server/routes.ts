@@ -550,6 +550,7 @@ export async function registerRoutes(
 
   app.get("/api/admin/premium", adminAuth, async (_req, res) => {
     try {
+      res.setHeader("Cache-Control", "no-store");
       const users = await storage.listPremiumUsers();
       res.json(users);
     } catch {

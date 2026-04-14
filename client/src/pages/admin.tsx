@@ -627,12 +627,13 @@ export default function AdminPage() {
   const { data: users = [], isLoading, isError, refetch } = useQuery<PremiumUser[]>({
     queryKey: ["/api/admin/premium", adminKey],
     queryFn: async () => {
-      const res = await fetch("/api/admin/premium", { headers });
+      const res = await fetch("/api/admin/premium", { headers, cache: "no-store" });
       if (res.status === 401) throw new Error("Unauthorized");
       if (!res.ok) throw new Error("Failed to load");
       return res.json();
     },
     enabled: authenticated,
+    staleTime: 0,
     retry: false,
   });
 
