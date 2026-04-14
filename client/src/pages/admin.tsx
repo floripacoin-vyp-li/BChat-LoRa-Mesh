@@ -780,24 +780,6 @@ export default function AdminPage() {
 
       <div className="max-w-4xl mx-auto p-4 space-y-4">
 
-        {/* Financial Overview */}
-        <FinancialSection adminKey={adminKey} />
-
-        {/* Email Config */}
-        <EmailConfigSection adminKey={adminKey} />
-
-        {/* Payment Config */}
-        <PaymentConfigSection
-          lightning={pcLightning} onLightning={setPcLightning}
-          bch={pcBch} onBch={setPcBch}
-          btc={pcBtc} onBtc={setPcBtc}
-          liquid={pcLiquid} onLiquid={setPcLiquid}
-          priceUsd={pcPriceUsd} onPriceUsd={setPcPriceUsd}
-          onSave={() => savePaymentConfig.mutate()}
-          isPending={savePaymentConfig.isPending}
-          isSaved={paymentSaved}
-        />
-
         {/* Filter tabs */}
         <div className="flex items-center gap-1">
           {(["pending", "active", "revoked", "all"] as Filter[]).map((f) => (
@@ -931,6 +913,25 @@ export default function AdminPage() {
             );
           })}
         </div>
+
+        {/* Financial Overview */}
+        <FinancialSection adminKey={adminKey} />
+
+        {/* Email Config */}
+        <EmailConfigSection adminKey={adminKey} />
+
+        {/* Payment Config */}
+        <PaymentConfigSection
+          lightning={pcLightning} onLightning={setPcLightning}
+          bch={pcBch} onBch={setPcBch}
+          btc={pcBtc} onBtc={setPcBtc}
+          liquid={pcLiquid} onLiquid={setPcLiquid}
+          priceUsd={pcPriceUsd} onPriceUsd={setPcPriceUsd}
+          onSave={() => savePaymentConfig.mutate()}
+          isPending={savePaymentConfig.isPending}
+          isSaved={paymentSaved}
+        />
+
       </div>
     </div>
   );

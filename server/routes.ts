@@ -44,6 +44,26 @@ async function sendApprovalEmail(to: string, alias: string, expiresAt: Date): Pr
   });
 }
 
+async function sendAdminNewRequestEmail(alias: string, email: string, paymentMethod: string | null, paymentAmount: string | null): Promise<void> {
+  const { transport, from } = await getMailTransport();
+  if (!from) return;
+  await transport.sendMail({
+    from,
+    to: from,
+    subject: "BCB Premium — new request waiting for approval",
+    text: `A new premium request is waiting for your approval.\n\nAlias: ${alias}\nEmail: ${email}\nPayment method: ${paymentMethod ?? "not specified"}\nAmount: ${paymentAmount ?? "not specified"}\n\nLog in to the admin panel to review and approve.`,
+    html: `<div style="font-family:monospace;max-width:420px;margin:auto;padding:24px;background:#0a0a0a;color:#e8e8e8;border-radius:12px;border:1px solid #222">
+  <p style="margin:0 0 8px;font-size:13px;color:#888;letter-spacing:.08em;text-transform:uppercase">BCB Premium — New Request</p>
+  <p style="margin:0 0 16px;font-size:18px;font-weight:700;color:#f59e0b">⏳ Waiting for your approval</p>
+  <p style="margin:0 0 6px;font-size:12px;color:#aaa">Alias: <strong style="color:#e8e8e8">${alias}</strong></p>
+  <p style="margin:0 0 6px;font-size:12px;color:#aaa">Email: <strong style="color:#e8e8e8">${email}</strong></p>
+  <p style="margin:0 0 6px;font-size:12px;color:#aaa">Payment method: <strong style="color:#e8e8e8">${paymentMethod ?? "not specified"}</strong></p>
+  <p style="margin:0 0 16px;font-size:12px;color:#aaa">Amount: <strong style="color:#e8e8e8">${paymentAmount ?? "not specified"}</strong></p>
+  <p style="margin:0;font-size:11px;color:#666">Log in to the admin panel to review, approve or reject this request.</p>
+</div>`,
+  });
+}
+
 async function sendVerificationEmail(to: string, code: string): Promise<void> {
   const { transport, from } = await getMailTransport();
   await transport.sendMail({
@@ -508,6 +528,9 @@ export async function registerRoutes(
         return res.status(400).json({ ok: false, message: "Invalid or expired verification code." });
       }
       const record = await storage.claimPremium(alias, email, paymentMethod, paymentAmount, paymentNote, paymentProof);
+      sendAdminNewRequestEmail(alias, email, paymentMethod ?? null, paymentAmount ?? null).catch((err) =>
+        console.error("admin-notify email failed:", err?.message)
+      );
       return res.status(201).json({ ok: true, status: record.status, expiresAt: record.expiresAt });
     } catch (err) {
       if (err instanceof z.ZodError) {
