@@ -279,6 +279,12 @@ export class DatabaseStorage implements IStorage {
       .update(users)
       .set({ publicKey, freedAt: null, registeredAt: new Date() })
       .where(sql`lower(${users.alias}) = lower(${alias})`);
+    // Update the premium record's alias to the email alias (in case it was
+    // stored under an old random alias when the user first applied for premium)
+    await db
+      .update(premiumUsers)
+      .set({ alias })
+      .where(sql`lower(${premiumUsers.email}) = lower(${alias})`);
   }
 
   async createVerificationCode(email: string, code: string): Promise<void> {
