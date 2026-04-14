@@ -16,10 +16,15 @@ import {
   Send,
   Crown,
   BadgeCheck,
+  Zap,
+  Bitcoin,
+  Waves,
 } from "lucide-react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+
+type PaymentCfg = { lightningAddress: string; bchAddress: string; btcAddress: string; liquidAddress: string };
 
 const sections = [
   {
@@ -219,6 +224,26 @@ export default function Tutorial() {
   const { toast } = useToast();
   const alias = localStorage.getItem("bcb-alias") ?? "";
 
+  const { data: paymentCfg } = useQuery<PaymentCfg>({
+    queryKey: ["/api/config/payment"],
+    queryFn: async () => {
+      const res = await fetch("/api/config/payment");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
+  const paymentMethods: { icon: JSX.Element; label: string; address: string }[] = [
+    { icon: <Zap size={12} className="text-amber-400" />,   label: "Lightning", address: paymentCfg?.lightningAddress ?? "" },
+    { icon: <span className="text-green-400 text-[10px] font-bold leading-none">₿</span>, label: "BCH", address: paymentCfg?.bchAddress ?? "" },
+    { icon: <Bitcoin size={12} className="text-orange-400" />, label: "BTC",  address: paymentCfg?.btcAddress ?? "" },
+    { icon: <Waves size={12} className="text-blue-400" />,   label: "Liquid", address: paymentCfg?.liquidAddress ?? "" },
+  ].filter((m) => m.address.trim() !== "");
+
+  const paymentLabel = paymentMethods.length === 0
+    ? "crypto payment"
+    : paymentMethods.map((m) => m.label).join(" / ");
+
   const [category, setCategory] = useState<Category>("bug");
   const [description, setDescription] = useState("");
   const [result, setResult] = useState<SubmitResult | null>(null);
@@ -315,11 +340,25 @@ export default function Tutorial() {
               Premium Features
             </h2>
           </div>
-          <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+          <p className="text-sm text-muted-foreground leading-relaxed mb-3">
             Upgrade to <strong className="text-amber-300">BCB Premium</strong> for{" "}
-            <strong className="text-amber-300">$10 / year</strong> (paid in sats via Lightning)
-            to unlock the following features inside the <strong>Secure</strong> panel.
+            <strong className="text-amber-300">$10 / year</strong> to unlock the following
+            features inside the <strong>Secure</strong> panel.
           </p>
+          {paymentMethods.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <span className="text-[11px] text-muted-foreground/50 font-mono">Pay via:</span>
+              {paymentMethods.map((m) => (
+                <span
+                  key={m.label}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] font-mono text-foreground/70"
+                >
+                  {m.icon}
+                  {m.label}
+                </span>
+              ))}
+            </div>
+          )}
           <ul className="space-y-3 text-sm text-muted-foreground">
             <li className="flex items-start gap-2">
               <BadgeCheck size={14} className="text-amber-400 mt-0.5 flex-shrink-0" />
@@ -348,7 +387,7 @@ export default function Tutorial() {
           </ul>
           <p className="mt-4 text-xs text-muted-foreground/60 leading-relaxed">
             To activate, open the <strong>Secure</strong> panel → scroll to{" "}
-            <strong>Premium Verified</strong> → follow the Lightning payment instructions,
+            <strong>Premium Verified</strong> → follow the {paymentLabel} payment instructions,
             then submit your email for verification. Approval is usually within 24 hours.
           </p>
         </div>
