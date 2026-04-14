@@ -373,6 +373,9 @@ export default function AdminPage() {
                     <div className="flex items-center gap-3 text-[10px] text-muted-foreground/50 flex-wrap">
                       <span data-testid={`text-email-${u.id}`}>{u.email}</span>
                       {paymentMethodBadge(u.paymentMethod)}
+                      {u.paymentAmount && (
+                        <span className="font-mono text-amber-300/80" data-testid={`text-amount-${u.id}`}>≈ {u.paymentAmount}</span>
+                      )}
                       <span>submitted {fmt(u.createdAt)}</span>
                       {u.status === "active" && <span>expires {fmt(u.expiresAt)}</span>}
                     </div>

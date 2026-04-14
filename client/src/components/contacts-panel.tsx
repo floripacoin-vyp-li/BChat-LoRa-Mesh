@@ -85,11 +85,19 @@ export function ContactsPanel({
 
   const isPremium = premiumStatus?.isPremium === true;
 
-  // $10 USD worth of sats, rounded to nearest 100 sats
+  // $10 USD quotations per method
   const requiredSats = prices?.btc
     ? Math.round((10 / prices.btc) * 100_000_000 / 100) * 100
     : null;
   const requiredMsats = requiredSats ? requiredSats * 1000 : null;
+
+  const quotations: Record<string, string | null> = {
+    lightning: requiredSats ? `${requiredSats.toLocaleString()} sats` : null,
+    btc:       prices?.btc  ? `${(10 / prices.btc).toFixed(6)} BTC`  : null,
+    bch:       prices?.bch  ? `${(10 / prices.bch).toFixed(4)} BCH`  : null,
+    liquid:    prices?.btc  ? `${(10 / prices.btc).toFixed(6)} L-BTC` : null,
+  };
+
   const lightningAddress = paymentCfg?.lightningAddress ?? "";
   const lightningUri = lightningAddress
     ? (requiredMsats ? `lightning:${lightningAddress}?amount=${requiredMsats}` : `lightning:${lightningAddress}`)
@@ -119,7 +127,7 @@ export function ContactsPanel({
 
   // Step 2: verify code + submit premium request (pending approval)
   const claimMutation = useMutation({
-    mutationFn: (data: { alias: string; email: string; code: string; paymentMethod?: string; paymentNote?: string; paymentProof?: string }) =>
+    mutationFn: (data: { alias: string; email: string; code: string; paymentMethod?: string; paymentAmount?: string; paymentNote?: string; paymentProof?: string }) =>
       apiRequest("POST", "/api/premium/claim", data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/premium/status", myAlias] });
@@ -154,7 +162,8 @@ export function ContactsPanel({
     }
     setPremiumFormError(null);
     const activeMethod = (paymentMethods.find((m) => m.key === paymentTab) ?? paymentMethods[0])?.key;
-    claimMutation.mutate({ alias: myAlias, email: premiumEmail, code: premiumCode, paymentMethod: activeMethod, paymentNote: premiumNote || undefined, paymentProof: premiumProof || undefined });
+    const activeQuote = activeMethod ? (quotations[activeMethod] ?? undefined) : undefined;
+    claimMutation.mutate({ alias: myAlias, email: premiumEmail, code: premiumCode, paymentMethod: activeMethod, paymentAmount: activeQuote, paymentNote: premiumNote || undefined, paymentProof: premiumProof || undefined });
   };
 
   const handleDownloadBackup = async () => {
@@ -769,9 +778,17 @@ export function ContactsPanel({
                         {/* Active payment method */}
                         {(() => {
                           const active = paymentMethods.find((m) => m.key === paymentTab) ?? paymentMethods[0];
+                          const quote = quotations[active.key];
                           return (
                             <div className="space-y-1.5">
-                              <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">Pay to ({active.label})</p>
+                              <div className="flex items-center justify-between">
+                                <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">Pay to ({active.label})</p>
+                                {quote && (
+                                  <span className="text-[11px] font-mono font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5" data-testid={`text-quote-${active.key}`}>
+                                    ≈ {quote} <span className="text-amber-300/50">= $10</span>
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex items-center gap-2 bg-black/20 border border-white/10 rounded-lg px-2.5 py-2">
                                 <Zap size={11} className="text-amber-400 flex-shrink-0" />
                                 <span className="flex-1 text-[11px] font-mono text-amber-300 break-all">{active.address}</span>
@@ -784,11 +801,6 @@ export function ContactsPanel({
                                   {copied ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
                                 </button>
                               </div>
-                              {active.key === "lightning" && requiredSats && (
-                                <p className="text-[10px] font-mono text-muted-foreground/50 pl-1">
-                                  ≈ {requiredSats.toLocaleString()} sats ($10 USD)
-                                </p>
-                              )}
                               <div className="flex justify-center py-1">
                                 <QRCodeDisplay value={active.qrValue} size={140} />
                               </div>

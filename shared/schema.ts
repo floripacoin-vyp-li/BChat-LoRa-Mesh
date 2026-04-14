@@ -70,6 +70,7 @@ export const premiumUsers = pgTable("premium_users", {
   alias: text("alias").notNull().unique(),
   email: text("email").notNull(),
   paymentMethod: text("payment_method"),
+  paymentAmount: text("payment_amount"),
   paymentNote: text("payment_note"),
   paymentProof: text("payment_proof"),
   status: text("status").notNull().default("pending"),

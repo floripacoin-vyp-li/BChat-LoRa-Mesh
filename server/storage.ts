@@ -32,7 +32,7 @@ export interface IStorage {
   deleteUser(alias: string, publicKey: string): Promise<"ok" | "forbidden" | "not_found">;
   createBugReport(data: InsertBugReport & { analysisNote: string; score: number; status: string }): Promise<BugReport>;
   getBugReports(): Promise<BugReport[]>;
-  claimPremium(alias: string, email: string, paymentNote?: string, paymentProof?: string): Promise<PremiumUser>;
+  claimPremium(alias: string, email: string, paymentMethod?: string, paymentAmount?: string, paymentNote?: string, paymentProof?: string): Promise<PremiumUser>;
   getPremiumByAlias(alias: string): Promise<PremiumUser | null>;
   getPremiumByEmail(email: string): Promise<PremiumUser | null>;
   listPremiumUsers(): Promise<PremiumUser[]>;
@@ -217,21 +217,21 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(bugReports).orderBy(asc(bugReports.createdAt));
   }
 
-  async claimPremium(alias: string, email: string, paymentMethod?: string, paymentNote?: string, paymentProof?: string): Promise<PremiumUser> {
+  async claimPremium(alias: string, email: string, paymentMethod?: string, paymentAmount?: string, paymentNote?: string, paymentProof?: string): Promise<PremiumUser> {
     const expiresAt = new Date();
     expiresAt.setFullYear(expiresAt.getFullYear() + 1);
     const [existing] = await db.select().from(premiumUsers).where(eq(premiumUsers.alias, alias)).limit(1);
     if (existing) {
       const [updated] = await db
         .update(premiumUsers)
-        .set({ email, paymentMethod: paymentMethod ?? null, paymentNote: paymentNote ?? null, paymentProof: paymentProof ?? null, status: "pending", expiresAt })
+        .set({ email, paymentMethod: paymentMethod ?? null, paymentAmount: paymentAmount ?? null, paymentNote: paymentNote ?? null, paymentProof: paymentProof ?? null, status: "pending", expiresAt })
         .where(eq(premiumUsers.alias, alias))
         .returning();
       return updated;
     }
     const [created] = await db
       .insert(premiumUsers)
-      .values({ alias, email, paymentMethod: paymentMethod ?? null, paymentNote: paymentNote ?? null, paymentProof: paymentProof ?? null, status: "pending", expiresAt })
+      .values({ alias, email, paymentMethod: paymentMethod ?? null, paymentAmount: paymentAmount ?? null, paymentNote: paymentNote ?? null, paymentProof: paymentProof ?? null, status: "pending", expiresAt })
       .returning();
     return created;
   }
