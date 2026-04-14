@@ -5,6 +5,7 @@ import {
   bugReports,
   premiumUsers,
   paymentConfig,
+  emailConfig,
   verificationCodes,
   type InsertMessage,
   type Message,
@@ -13,6 +14,7 @@ import {
   type BugReport,
   type PremiumUser,
   type PaymentConfig,
+  type EmailConfig,
 } from "@shared/schema";
 import { eq, asc, gt, gte, and, notInArray, isNull, lt, sql, desc } from "drizzle-orm";
 
@@ -43,6 +45,8 @@ export interface IStorage {
   verifyCode(email: string, code: string): Promise<boolean>;
   getPaymentConfig(): Promise<PaymentConfig | null>;
   upsertPaymentConfig(data: { lightningAddress: string; bchAddress: string; btcAddress: string; liquidAddress: string; premiumPriceUsd: number }): Promise<PaymentConfig>;
+  getEmailConfig(): Promise<EmailConfig | null>;
+  upsertEmailConfig(data: { smtpHost: string; smtpPort: number; smtpUser: string; smtpPass?: string; smtpFrom: string }): Promise<EmailConfig>;
   getFinancialStats(premiumPriceUsd: number): Promise<{
     thisWeek: { count: number; revenue: number };
     thisMonth: { count: number; revenue: number };
@@ -338,6 +342,31 @@ export class DatabaseStorage implements IStorage {
       return updated;
     }
     const [created] = await db.insert(paymentConfig).values({ id: 1, ...data }).returning();
+    return created;
+  }
+
+  async getEmailConfig(): Promise<EmailConfig | null> {
+    const [row] = await db.select().from(emailConfig).where(eq(emailConfig.id, 1)).limit(1);
+    return row ?? null;
+  }
+
+  async upsertEmailConfig(data: { smtpHost: string; smtpPort: number; smtpUser: string; smtpPass?: string; smtpFrom: string }): Promise<EmailConfig> {
+    const [existing] = await db.select().from(emailConfig).where(eq(emailConfig.id, 1)).limit(1);
+    if (existing) {
+      const update: Partial<typeof data & { updatedAt: Date }> = {
+        smtpHost: data.smtpHost,
+        smtpPort: data.smtpPort,
+        smtpUser: data.smtpUser,
+        smtpFrom: data.smtpFrom,
+        updatedAt: new Date(),
+      };
+      if (data.smtpPass !== undefined && data.smtpPass !== "") {
+        update.smtpPass = data.smtpPass;
+      }
+      const [updated] = await db.update(emailConfig).set(update).where(eq(emailConfig.id, 1)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(emailConfig).values({ id: 1, ...data, smtpPass: data.smtpPass ?? "" }).returning();
     return created;
   }
 

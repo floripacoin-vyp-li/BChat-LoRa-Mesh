@@ -9,19 +9,27 @@ import type { Message } from "@shared/schema";
 import { insertBugReportSchema } from "@shared/schema";
 
 // ── Email transport (nodemailer) ────────────────────────────────────────────
-const smtpTransport = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT ?? 587),
-  secure: Number(process.env.SMTP_PORT ?? 587) === 465,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+async function getMailTransport() {
+  const cfg = await storage.getEmailConfig();
+  const host = cfg?.smtpHost || process.env.SMTP_HOST || "";
+  const port = cfg?.smtpPort || Number(process.env.SMTP_PORT ?? 587);
+  const user = cfg?.smtpUser || process.env.SMTP_USER || "";
+  const pass = cfg?.smtpPass || process.env.SMTP_PASS || "";
+  return {
+    transport: nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: user ? { user, pass } : undefined,
+    }),
+    from: cfg?.smtpFrom || process.env.SMTP_FROM || user,
+  };
+}
 
 async function sendApprovalEmail(to: string, alias: string, expiresAt: Date): Promise<void> {
-  await smtpTransport.sendMail({
-    from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
+  const { transport, from } = await getMailTransport();
+  await transport.sendMail({
+    from,
     to,
     subject: "BCB Premium — your account has been approved!",
     text: `Great news! Your BCB Premium account for alias "${alias}" has been approved and is now active until ${expiresAt.toDateString()}.\n\nAlias: ${alias}\nEmail: ${to}\nActive until: ${expiresAt.toDateString()}\n\nEnjoy your verified badge and wallet backup features.`,
@@ -37,8 +45,9 @@ async function sendApprovalEmail(to: string, alias: string, expiresAt: Date): Pr
 }
 
 async function sendVerificationEmail(to: string, code: string): Promise<void> {
-  await smtpTransport.sendMail({
-    from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
+  const { transport, from } = await getMailTransport();
+  await transport.sendMail({
+    from,
     to,
     subject: "BCB Premium — your verification code",
     text: `Your BCB verification code is: ${code}\n\nIt expires in 15 minutes. Do not share it with anyone.`,
@@ -591,6 +600,67 @@ export async function registerRoutes(
       res.json({ priceUsd, ...stats });
     } catch {
       res.status(500).json({ message: "Failed to load financial stats" });
+    }
+  });
+
+  // ── Email config ────────────────────────────────────────────────────────────
+
+  app.get("/api/admin/email-config", adminAuth, async (_req, res) => {
+    try {
+      const cfg = await storage.getEmailConfig();
+      res.json({
+        smtpHost: cfg?.smtpHost ?? "",
+        smtpPort: cfg?.smtpPort ?? 587,
+        smtpUser: cfg?.smtpUser ?? "",
+        smtpPassSet: !!(cfg?.smtpPass),
+        smtpFrom: cfg?.smtpFrom ?? "",
+        updatedAt: cfg?.updatedAt ?? null,
+      });
+    } catch {
+      res.status(500).json({ message: "Failed to load email config" });
+    }
+  });
+
+  app.put("/api/admin/email-config", adminAuth, async (req, res) => {
+    try {
+      const schema = z.object({
+        smtpHost: z.string().max(300),
+        smtpPort: z.number().int().min(1).max(65535),
+        smtpUser: z.string().max(300),
+        smtpPass: z.string().max(500).optional(),
+        smtpFrom: z.string().max(300),
+      });
+      const data = schema.parse(req.body);
+      const cfg = await storage.upsertEmailConfig(data);
+      res.json({
+        ok: true,
+        smtpHost: cfg.smtpHost,
+        smtpPort: cfg.smtpPort,
+        smtpUser: cfg.smtpUser,
+        smtpPassSet: !!cfg.smtpPass,
+        smtpFrom: cfg.smtpFrom,
+        updatedAt: cfg.updatedAt,
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      res.status(500).json({ message: "Failed to save email config" });
+    }
+  });
+
+  app.post("/api/admin/email-test", adminAuth, async (req, res) => {
+    try {
+      const { to } = z.object({ to: z.string().email() }).parse(req.body);
+      const { transport, from } = await getMailTransport();
+      await transport.sendMail({
+        from,
+        to,
+        subject: "BCB Admin — SMTP test",
+        text: `This is a test email from BCB Admin panel sent at ${new Date().toISOString()}.`,
+        html: `<div style="font-family:monospace;padding:16px;background:#0a0a0a;color:#e8e8e8;border-radius:8px"><p style="color:#f59e0b;margin:0 0 8px;font-size:14px">✓ BCB SMTP test successful</p><p style="margin:0;font-size:12px;color:#888">Sent at ${new Date().toISOString()}</p></div>`,
+      });
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "Failed to send test email" });
     }
   });
 

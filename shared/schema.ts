@@ -104,6 +104,19 @@ export const paymentConfig = pgTable("payment_config", {
 
 export type PaymentConfig = typeof paymentConfig.$inferSelect;
 
+// ── Email SMTP config (admin-configurable) ──────────────────────────────────
+export const emailConfig = pgTable("email_config", {
+  id: serial("id").primaryKey(),
+  smtpHost: text("smtp_host").notNull().default(""),
+  smtpPort: integer("smtp_port").notNull().default(587),
+  smtpUser: text("smtp_user").notNull().default(""),
+  smtpPass: text("smtp_pass").notNull().default(""),
+  smtpFrom: text("smtp_from").notNull().default(""),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type EmailConfig = typeof emailConfig.$inferSelect;
+
 // ── Email verification codes ────────────────────────────────────────────────
 export const verificationCodes = pgTable("verification_codes", {
   id: serial("id").primaryKey(),

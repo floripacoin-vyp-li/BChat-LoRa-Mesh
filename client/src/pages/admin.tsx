@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Shield, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, LogOut, RefreshCw, Settings, Save, Loader2, Zap, Bitcoin, Waves, TrendingUp, DollarSign, Users, Calendar } from "lucide-react";
+import { Shield, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, LogOut, RefreshCw, Settings, Save, Loader2, Zap, Bitcoin, Waves, TrendingUp, DollarSign, Users, Calendar, Mail, Send, Eye, EyeOff, KeyRound } from "lucide-react";
 import type { PremiumUser, PaymentConfig } from "@shared/schema";
 
 type Filter = "all" | "pending" | "active" | "revoked";
@@ -158,6 +158,274 @@ function PaymentConfigSection({
               <span className="flex items-center gap-1 text-[11px] text-green-400 font-mono">
                 <CheckCircle2 size={11} /> Saved
               </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type EmailConfigData = {
+  smtpHost: string;
+  smtpPort: number;
+  smtpUser: string;
+  smtpPassSet: boolean;
+  smtpFrom: string;
+  updatedAt: string | null;
+};
+
+function EmailConfigSection({ adminKey }: { adminKey: string }) {
+  const [open, setOpen] = useState(false);
+  const [host, setHost] = useState("");
+  const [port, setPort] = useState("587");
+  const [user, setUser] = useState("");
+  const [pass, setPass] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [from, setFrom] = useState("");
+  const [testTo, setTestTo] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message?: string } | null>(null);
+
+  const qc = useQueryClient();
+  const headers = { "x-admin-key": adminKey };
+
+  const { data } = useQuery<EmailConfigData>({
+    queryKey: ["/api/admin/email-config", adminKey],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/email-config", { headers });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!adminKey,
+    staleTime: 0,
+  });
+
+  useEffect(() => {
+    if (!data) return;
+    setHost(data.smtpHost ?? "");
+    setPort(String(data.smtpPort ?? 587));
+    setUser(data.smtpUser ?? "");
+    setFrom(data.smtpFrom ?? "");
+    setPass("");
+  }, [data]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/email-config", {
+        method: "PUT",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          smtpHost: host,
+          smtpPort: Number(port) || 587,
+          smtpUser: user,
+          smtpPass: pass || undefined,
+          smtpFrom: from,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/email-config", adminKey] });
+      setPass("");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    },
+  });
+
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/email-test", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ to: testTo }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message ?? "Failed");
+      return json;
+    },
+    onSuccess: () => {
+      setTestResult({ ok: true });
+      setTimeout(() => setTestResult(null), 4000);
+    },
+    onError: (e: any) => {
+      setTestResult({ ok: false, message: e.message });
+      setTimeout(() => setTestResult(null), 5000);
+    },
+  });
+
+  const fmtDate = (s: string | null) => s ? new Date(s).toLocaleString() : null;
+
+  return (
+    <div className="bg-card border border-border/40 rounded-xl overflow-hidden" data-testid="email-config-section">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/3 transition-colors"
+        data-testid="button-toggle-email-config"
+      >
+        <div className="flex items-center gap-2">
+          <Mail size={14} className="text-sky-400" />
+          <span className="text-sm font-semibold text-foreground">Email Configuration</span>
+          <span className="text-[10px] text-muted-foreground/50">— SMTP settings for verification &amp; approval emails</span>
+        </div>
+        {open ? <ChevronUp size={13} className="text-muted-foreground/40" /> : <ChevronDown size={13} className="text-muted-foreground/40" />}
+      </button>
+
+      {open && (
+        <div className="border-t border-border/30 px-4 py-4 space-y-4 bg-background/30">
+
+          {/* Last updated */}
+          {data?.updatedAt && (
+            <p className="text-[10px] text-muted-foreground/30 font-mono">Last saved: {fmtDate(data.updatedAt)}</p>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* SMTP Host */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">SMTP Host</label>
+              <input
+                type="text"
+                value={host}
+                onChange={(e) => setHost(e.target.value)}
+                placeholder="smtp.example.com"
+                className="w-full bg-background/50 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-sky-400/40"
+                data-testid="input-smtp-host"
+              />
+            </div>
+
+            {/* SMTP Port */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">Port</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="65535"
+                  value={port}
+                  onChange={(e) => setPort(e.target.value)}
+                  className="w-24 bg-background/50 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-sky-400/40"
+                  data-testid="input-smtp-port"
+                />
+                <div className="flex gap-1">
+                  {["465", "587", "25"].map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setPort(p)}
+                      className={`px-2 py-1 rounded text-[10px] font-mono transition-colors ${port === p ? "bg-sky-500/20 text-sky-300 border border-sky-500/30" : "text-muted-foreground/40 hover:text-foreground hover:bg-white/5 border border-transparent"}`}
+                      data-testid={`button-port-${p}`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {port === "465" && <p className="text-[10px] text-sky-400/60 font-mono">SSL/TLS (secure)</p>}
+              {port === "587" && <p className="text-[10px] text-amber-400/60 font-mono">STARTTLS</p>}
+            </div>
+
+            {/* SMTP User */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">Username</label>
+              <input
+                type="text"
+                value={user}
+                onChange={(e) => setUser(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full bg-background/50 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-sky-400/40"
+                data-testid="input-smtp-user"
+              />
+            </div>
+
+            {/* SMTP Password */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">
+                Password
+                {data?.smtpPassSet && (
+                  <span className="flex items-center gap-0.5 text-[9px] text-green-400/70 normal-case tracking-normal font-normal">
+                    <KeyRound size={8} /> set
+                  </span>
+                )}
+              </label>
+              <div className="relative">
+                <input
+                  type={showPass ? "text" : "password"}
+                  value={pass}
+                  onChange={(e) => setPass(e.target.value)}
+                  placeholder={data?.smtpPassSet ? "(unchanged)" : "Enter password"}
+                  className="w-full bg-background/50 border border-white/10 rounded-lg px-3 py-2 pr-9 text-xs font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-sky-400/40"
+                  data-testid="input-smtp-pass"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors"
+                  data-testid="button-toggle-pass"
+                >
+                  {showPass ? <EyeOff size={11} /> : <Eye size={11} />}
+                </button>
+              </div>
+            </div>
+
+            {/* From address */}
+            <div className="space-y-1 sm:col-span-2">
+              <label className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide">From address</label>
+              <input
+                type="text"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                placeholder={'BCB <noreply@example.com>'}
+                className="w-full bg-background/50 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-sky-400/40"
+                data-testid="input-smtp-from"
+              />
+              <p className="text-[10px] text-muted-foreground/30 font-mono">Used as the sender in all outgoing emails. Leave blank to use the username above.</p>
+            </div>
+          </div>
+
+          {/* Save */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-sky-500/15 text-sky-300 border border-sky-500/30 text-xs font-mono font-semibold hover:bg-sky-500/25 disabled:opacity-40 transition-colors"
+              data-testid="button-save-email-config"
+            >
+              {saveMutation.isPending ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
+              {saveMutation.isPending ? "Saving…" : "Save"}
+            </button>
+            {saved && (
+              <span className="flex items-center gap-1 text-[11px] text-green-400 font-mono">
+                <CheckCircle2 size={11} /> Saved
+              </span>
+            )}
+          </div>
+
+          {/* Test email */}
+          <div className="border-t border-border/20 pt-3 space-y-2">
+            <p className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-wide">Send a test email</p>
+            <div className="flex items-center gap-2">
+              <input
+                type="email"
+                value={testTo}
+                onChange={(e) => setTestTo(e.target.value)}
+                placeholder="recipient@example.com"
+                className="flex-1 bg-background/50 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-sky-400/40"
+                data-testid="input-test-email-to"
+              />
+              <button
+                onClick={() => testMutation.mutate()}
+                disabled={testMutation.isPending || !testTo}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 text-muted-foreground/70 border border-white/10 text-xs font-mono hover:bg-white/10 hover:text-foreground disabled:opacity-40 transition-colors"
+                data-testid="button-send-test-email"
+              >
+                {testMutation.isPending ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
+                {testMutation.isPending ? "Sending…" : "Send test"}
+              </button>
+            </div>
+            {testResult && (
+              <p className={`text-[11px] font-mono ${testResult.ok ? "text-green-400" : "text-destructive"}`} data-testid="text-test-result">
+                {testResult.ok ? "✓ Test email sent successfully" : `✗ ${testResult.message}`}
+              </p>
             )}
           </div>
         </div>
@@ -514,6 +782,9 @@ export default function AdminPage() {
 
         {/* Financial Overview */}
         <FinancialSection adminKey={adminKey} />
+
+        {/* Email Config */}
+        <EmailConfigSection adminKey={adminKey} />
 
         {/* Payment Config */}
         <PaymentConfigSection
