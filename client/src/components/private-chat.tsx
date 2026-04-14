@@ -110,13 +110,14 @@ export function PrivateChat({
     const trimmed = content.trim();
     if (!trimmed || isPending) return;
 
+    // Add the optimistic copy BEFORE the send so it is already in the thread
+    // when the SSE echo arrives — preventing a duplicate from being appended.
+    onAddSentDm(contactAlias, trimmed);
+    setContent("");
+
     sendDm(
       { contactAlias, content: trimmed, myAlias },
       {
-        onSuccess: () => {
-          onAddSentDm(contactAlias, trimmed);
-          setContent("");
-        },
         onError: (err) => {
           toast({
             title: "Message not sent",
@@ -165,15 +166,14 @@ export function PrivateChat({
 
     const msgContent = formatBchPayMessage(payload);
 
+    onAddSentDm(contactAlias, msgContent);
+    setShowPayForm(false);
+    setPayForm({ amount: "", memo: "" });
+    setPayFormError(null);
+
     sendDm(
       { contactAlias, content: msgContent, myAlias },
       {
-        onSuccess: () => {
-          onAddSentDm(contactAlias, msgContent);
-          setShowPayForm(false);
-          setPayForm({ amount: "", memo: "" });
-          setPayFormError(null);
-        },
         onError: (err) => {
           toast({
             title: "Request not sent",
@@ -193,15 +193,12 @@ export function PrivateChat({
 
     // Send a "payment sent" confirmation back
     const sentMsg = formatBchPaySent(payReq.requestId);
+    onAddSentDm(contactAlias, sentMsg);
+    setPaidRequestIds((prev) => { const s = new Set(Array.from(prev)); s.add(payReq.requestId); return s; });
+
     sendDm(
       { contactAlias, content: sentMsg, myAlias },
-      {
-        onSuccess: () => {
-          onAddSentDm(contactAlias, sentMsg);
-          setPaidRequestIds((prev) => { const s = new Set(Array.from(prev)); s.add(payReq.requestId); return s; });
-        },
-        onError: () => {},
-      }
+      { onError: () => {} }
     );
   };
 
