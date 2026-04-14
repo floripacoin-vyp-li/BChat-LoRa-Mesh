@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/routes";
 import type { Message } from "@shared/schema";
@@ -20,86 +20,110 @@ export function usePrivateMessages(
   getSharedKey: ContactsHook["getSharedKey"]
 ) {
   const queryClient = useQueryClient();
-  const seenIds = useRef<Set<number>>(new Set());
+  // decryptedIds: messages that were successfully decrypted (or confirmed non-DM) — permanently skip
+  const decryptedIds = useRef<Set<number>>(new Set());
+  // inProgressIds: DMs whose IIFE is currently running — prevents duplicate concurrent work
+  const inProgressIds = useRef<Set<number>>(new Set());
   const threads = useRef<Map<string, PrivateMessage[]>>(new Map());
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [, forceRender] = useState(0);
 
   useEffect(() => {
-    const unsubscribe = queryClient.getQueryCache().subscribe(() => {
+    function processMessages() {
       const messages = queryClient.getQueryData<Message[]>([api.messages.list.path]);
       if (!messages) return;
 
-      let changed = false;
-
       for (const msg of messages) {
-        if (seenIds.current.has(msg.id)) continue;
-        seenIds.current.add(msg.id);
+        // Already successfully handled, or a concurrent IIFE is running for this id
+        if (decryptedIds.current.has(msg.id) || inProgressIds.current.has(msg.id)) continue;
 
         const parsed = parseDmPayload(msg.content);
-        if (!parsed) continue;
+        if (!parsed) {
+          // Not a DM — permanently skip without async work
+          decryptedIds.current.add(msg.id);
+          continue;
+        }
 
-        // Try each contact's shared key until one decrypts successfully
+        // Guard against concurrent IIFEs for the same message
+        inProgressIds.current.add(msg.id);
+
         (async () => {
-          for (const contact of contacts) {
-            const sharedKey = await getSharedKey(contact.alias);
-            if (!sharedKey) continue;
+          let added = false;
+          try {
+            for (const contact of contacts) {
+              const sharedKey = await getSharedKey(contact.alias);
+              if (!sharedKey) continue;
 
-            const { decrypt } = await import("@/lib/crypto");
-            const plaintext = await decrypt(sharedKey, parsed.encrypted);
-            if (plaintext === null) continue;
+              const { decrypt } = await import("@/lib/crypto");
+              const plaintext = await decrypt(sharedKey, parsed.encrypted);
+              if (plaintext === null) continue;
 
-            const mine = parsed.senderAlias !== contact.alias;
-            const threadAlias = contact.alias;
+              const mine = parsed.senderAlias !== contact.alias;
+              const threadAlias = contact.alias;
 
-            const privateMsg: PrivateMessage = {
-              id: msg.id,
-              senderAlias: parsed.senderAlias,
-              content: plaintext,
-              timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-              mine,
-            };
+              const privateMsg: PrivateMessage = {
+                id: msg.id,
+                senderAlias: parsed.senderAlias,
+                content: plaintext,
+                timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+                mine,
+              };
 
-            const existing = threads.current.get(threadAlias) ?? [];
-            if (existing.some((m) => m.id === privateMsg.id)) {
-              // Already added (e.g. duplicate SSE event) — skip
-            } else if (mine && existing.some((m) => m.mine && m.content === privateMsg.content)) {
-              // Replace the optimistic copy (id: Date.now()) with the real server message
-              threads.current.set(
-                threadAlias,
-                existing.map((m) =>
-                  m.mine && m.content === privateMsg.content && m.id > 1_000_000_000_000
-                    ? privateMsg
-                    : m
-                )
-              );
-              changed = true;
-            } else {
-              threads.current.set(threadAlias, [...existing, privateMsg]);
-              if (!mine) {
-                setUnreadCounts((prev) => ({
-                  ...prev,
-                  [threadAlias]: (prev[threadAlias] ?? 0) + 1,
-                }));
+              const existing = threads.current.get(threadAlias) ?? [];
+              if (existing.some((m) => m.id === privateMsg.id)) {
+                // Already in the thread (shouldn't happen due to inProgressIds guard)
+              } else if (mine && existing.some((m) => m.mine && m.content === privateMsg.content)) {
+                // Replace the optimistic copy (id: Date.now()) with the real server message
+                threads.current.set(
+                  threadAlias,
+                  existing.map((m) =>
+                    m.mine && m.content === privateMsg.content && m.id > 1_000_000_000_000
+                      ? privateMsg
+                      : m
+                  )
+                );
+                added = true;
+              } else {
+                threads.current.set(threadAlias, [...existing, privateMsg]);
+                if (!mine) {
+                  setUnreadCounts((prev) => ({
+                    ...prev,
+                    [threadAlias]: (prev[threadAlias] ?? 0) + 1,
+                  }));
+                }
+                added = true;
               }
-              changed = true;
+
+              // Only permanently skip after a successful decrypt
+              decryptedIds.current.add(msg.id);
+              break;
             }
-            break;
+          } finally {
+            // Always clear the in-progress guard.
+            // If decryption failed (no matching contact / key), the message is NOT in
+            // decryptedIds, so it will be retried on the next processMessages() call —
+            // which fires immediately when contacts change (see below).
+            inProgressIds.current.delete(msg.id);
           }
 
-          if (changed) forceRender((n) => n + 1);
+          if (added) forceRender((n) => n + 1);
         })();
       }
-    });
+    }
 
+    // Re-scan immediately whenever contacts change so that DMs received before a contact
+    // was added (and therefore failed to decrypt earlier) are processed right away.
+    processMessages();
+
+    const unsubscribe = queryClient.getQueryCache().subscribe(processMessages);
     return () => unsubscribe();
   }, [queryClient, contacts, getSharedKey]);
 
-  const getThread = (contactAlias: string): PrivateMessage[] => {
+  const getThread = useCallback((contactAlias: string): PrivateMessage[] => {
     return threads.current.get(contactAlias) ?? [];
-  };
+  }, []);
 
-  const addSentDm = (contactAlias: string, content: string) => {
+  const addSentDm = useCallback((contactAlias: string, content: string) => {
     const msg: PrivateMessage = {
       id: Date.now(),
       senderAlias: "me",
@@ -110,11 +134,14 @@ export function usePrivateMessages(
     const existing = threads.current.get(contactAlias) ?? [];
     threads.current.set(contactAlias, [...existing, msg]);
     forceRender((n) => n + 1);
-  };
+  }, []);
 
-  const markRead = (contactAlias: string) => {
-    setUnreadCounts((prev) => ({ ...prev, [contactAlias]: 0 }));
-  };
+  const markRead = useCallback((contactAlias: string) => {
+    setUnreadCounts((prev) => {
+      if ((prev[contactAlias] ?? 0) === 0) return prev; // bail out if already zero
+      return { ...prev, [contactAlias]: 0 };
+    });
+  }, []);
 
   const totalUnread = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
 

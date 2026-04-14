@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   initKeyPair,
   importContactPublicKey,
@@ -64,7 +64,7 @@ export function useContacts() {
     setContacts(updated);
   };
 
-  const getSharedKey = async (alias: string): Promise<CryptoKey | null> => {
+  const getSharedKey = useCallback(async (alias: string): Promise<CryptoKey | null> => {
     if (keyCache.current.has(alias)) return keyCache.current.get(alias)!;
 
     const contact = contacts.find((c) => c.alias === alias);
@@ -82,7 +82,7 @@ export function useContacts() {
       console.error("[Crypto] Failed to derive shared key for", alias, e);
       return null;
     }
-  };
+  }, [contacts]);
 
   return { contacts, addContact, removeContact, getSharedKey };
 }
