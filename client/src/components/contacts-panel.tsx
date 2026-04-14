@@ -65,6 +65,7 @@ export function ContactsPanel({
   const [premiumSubmitted, setPremiumSubmitted] = useState(false);
   const [copied, setCopied] = useState(false);
   const [paymentTab, setPaymentTab] = useState<"lightning" | "bch" | "btc" | "liquid">("lightning");
+  const [selectedStablecoin, setSelectedStablecoin] = useState<string | null>(null);
 
   const { data: premiumStatus } = useQuery<{ isPremium: boolean; email?: string; expiresAt?: string }>({
     queryKey: ["/api/premium/status", myAlias],
@@ -94,6 +95,13 @@ export function ContactsPanel({
   // Liquid stablecoin equivalents for $10 (USDt fixed, EURx/DePix from forex)
   const liquidEurx  = prices?.eurPerUsd ? `${(10 * prices.eurPerUsd).toFixed(2)} EURx`  : null;
   const liquidDepix = prices?.brlPerUsd ? `${(10 * prices.brlPerUsd).toFixed(2)} DePix` : null;
+
+  type StablecoinOption = { id: string; amount: string; activeClass: string; idleClass: string };
+  const stablecoinOptions: StablecoinOption[] = [
+    { id: "USDt",  amount: "10.00 USDt",  activeClass: "bg-emerald-500/15 border-emerald-500/40 text-emerald-400", idleClass: "bg-white/5 border-white/10 text-muted-foreground/50 hover:border-emerald-500/25 hover:text-emerald-400/70" },
+    ...(liquidEurx  ? [{ id: "EURx",  amount: liquidEurx,  activeClass: "bg-blue-500/15 border-blue-500/40 text-blue-300",       idleClass: "bg-white/5 border-white/10 text-muted-foreground/50 hover:border-blue-500/25 hover:text-blue-300/70"    }] : []),
+    ...(liquidDepix ? [{ id: "DePix", amount: liquidDepix, activeClass: "bg-green-500/15 border-green-500/40 text-green-300",    idleClass: "bg-white/5 border-white/10 text-muted-foreground/50 hover:border-green-500/25 hover:text-green-300/70"   }] : []),
+  ];
 
   const liquidAmountStr = prices?.btc
     ? [
@@ -175,8 +183,11 @@ export function ContactsPanel({
     }
     setPremiumFormError(null);
     const activeMethod = (paymentMethods.find((m) => m.key === paymentTab) ?? paymentMethods[0])?.key;
+    const chosenStable = activeMethod === "liquid" && selectedStablecoin
+      ? stablecoinOptions.find((s) => s.id === selectedStablecoin)?.amount
+      : undefined;
     const activeQuote = activeMethod === "liquid"
-      ? (liquidAmountStr ?? quotations["liquid"] ?? undefined)
+      ? (chosenStable ?? liquidAmountStr ?? quotations["liquid"] ?? undefined)
       : (activeMethod ? (quotations[activeMethod] ?? undefined) : undefined);
     claimMutation.mutate({ alias: myAlias, email: premiumEmail, code: premiumCode, paymentMethod: activeMethod, paymentAmount: activeQuote, paymentNote: premiumNote || undefined, paymentProof: premiumProof || undefined });
   };
@@ -776,7 +787,7 @@ export function ContactsPanel({
                             {paymentMethods.map((m) => (
                               <button
                                 key={m.key}
-                                onClick={() => setPaymentTab(m.key)}
+                                onClick={() => { setPaymentTab(m.key); setSelectedStablecoin(null); }}
                                 className={`px-2.5 py-1 rounded-md text-[10px] font-mono font-semibold transition-colors ${
                                   paymentTab === m.key
                                     ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
@@ -807,16 +818,32 @@ export function ContactsPanel({
                                 )}
                               </div>
 
-                              {/* On Liquid tab: stablecoins info row */}
-                              {active.key === "liquid" && (
-                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 bg-blue-500/5 border border-blue-500/15 rounded-lg px-3 py-2" data-testid="liquid-stables-row">
-                                  <span className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-wide w-full">Or pay in stablecoins:</span>
-                                  <span className="text-[11px] font-mono font-semibold text-emerald-400" data-testid="quote-usdt">10.00 USDt</span>
-                                  {liquidEurx && (
-                                    <><span className="text-muted-foreground/30">·</span><span className="text-[11px] font-mono font-semibold text-blue-300" data-testid="quote-eurx">{liquidEurx}</span></>
-                                  )}
-                                  {liquidDepix && (
-                                    <><span className="text-muted-foreground/30">·</span><span className="text-[11px] font-mono font-semibold text-green-300" data-testid="quote-depix">{liquidDepix}</span></>
+                              {/* On Liquid tab: stablecoin selector buttons */}
+                              {active.key === "liquid" && stablecoinOptions.length > 0 && (
+                                <div className="space-y-1.5" data-testid="liquid-stables-row">
+                                  <p className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-wide">
+                                    Or pay in stablecoins — choose one:
+                                  </p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {stablecoinOptions.map((opt) => {
+                                      const isSelected = selectedStablecoin === opt.id;
+                                      return (
+                                        <button
+                                          key={opt.id}
+                                          onClick={() => setSelectedStablecoin(isSelected ? null : opt.id)}
+                                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-mono font-semibold transition-colors ${isSelected ? opt.activeClass : opt.idleClass}`}
+                                          data-testid={`button-stable-${opt.id.toLowerCase()}`}
+                                        >
+                                          {isSelected && <Check size={10} className="flex-shrink-0" />}
+                                          {opt.amount}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  {selectedStablecoin && (
+                                    <p className="text-[10px] font-mono text-muted-foreground/40">
+                                      Selected: <span className="text-foreground/70">{stablecoinOptions.find(s => s.id === selectedStablecoin)?.amount}</span> — this will be recorded with your request
+                                    </p>
                                   )}
                                 </div>
                               )}
