@@ -1,9 +1,26 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Shield, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, LogOut, RefreshCw, Settings, Save, Loader2, Zap, Bitcoin, Waves } from "lucide-react";
 import type { PremiumUser, PaymentConfig } from "@shared/schema";
 
 type Filter = "all" | "pending" | "active" | "revoked";
+
+const PAYMENT_METHOD_LABELS: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
+  lightning: { label: "Lightning", icon: <Zap size={9} />, color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
+  bch:       { label: "BCH",       icon: <span className="text-[9px] font-bold leading-none">₿</span>, color: "text-green-400 bg-green-500/10 border-green-500/20" },
+  btc:       { label: "BTC",       icon: <Bitcoin size={9} />, color: "text-orange-400 bg-orange-500/10 border-orange-500/20" },
+  liquid:    { label: "Liquid",    icon: <Waves size={9} />,   color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+};
+
+function paymentMethodBadge(method: string | null | undefined) {
+  if (!method) return null;
+  const meta = PAYMENT_METHOD_LABELS[method] ?? { label: method, icon: null, color: "text-muted-foreground/60 bg-white/5 border-white/10" };
+  return (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[10px] font-mono font-semibold ${meta.color}`}>
+      {meta.icon}{meta.label}
+    </span>
+  );
+}
 
 function statusBadge(status: string) {
   if (status === "active")
@@ -355,6 +372,7 @@ export default function AdminPage() {
                     </div>
                     <div className="flex items-center gap-3 text-[10px] text-muted-foreground/50 flex-wrap">
                       <span data-testid={`text-email-${u.id}`}>{u.email}</span>
+                      {paymentMethodBadge(u.paymentMethod)}
                       <span>submitted {fmt(u.createdAt)}</span>
                       {u.status === "active" && <span>expires {fmt(u.expiresAt)}</span>}
                     </div>

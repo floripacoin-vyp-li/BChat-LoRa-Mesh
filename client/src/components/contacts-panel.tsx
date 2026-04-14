@@ -119,7 +119,7 @@ export function ContactsPanel({
 
   // Step 2: verify code + submit premium request (pending approval)
   const claimMutation = useMutation({
-    mutationFn: (data: { alias: string; email: string; code: string; paymentNote?: string; paymentProof?: string }) =>
+    mutationFn: (data: { alias: string; email: string; code: string; paymentMethod?: string; paymentNote?: string; paymentProof?: string }) =>
       apiRequest("POST", "/api/premium/claim", data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/premium/status", myAlias] });
@@ -153,7 +153,8 @@ export function ContactsPanel({
       return;
     }
     setPremiumFormError(null);
-    claimMutation.mutate({ alias: myAlias, email: premiumEmail, code: premiumCode, paymentNote: premiumNote || undefined, paymentProof: premiumProof || undefined });
+    const activeMethod = (paymentMethods.find((m) => m.key === paymentTab) ?? paymentMethods[0])?.key;
+    claimMutation.mutate({ alias: myAlias, email: premiumEmail, code: premiumCode, paymentMethod: activeMethod, paymentNote: premiumNote || undefined, paymentProof: premiumProof || undefined });
   };
 
   const handleDownloadBackup = async () => {

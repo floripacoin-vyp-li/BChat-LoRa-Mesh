@@ -479,18 +479,19 @@ export async function registerRoutes(
     alias: z.string().min(1),
     email: z.string().email(),
     code: z.string().length(6),
+    paymentMethod: z.string().optional(),
     paymentNote: z.string().optional(),
     paymentProof: z.string().optional(),
   });
 
   app.post("/api/premium/claim", async (req, res) => {
     try {
-      const { alias, email, code, paymentNote, paymentProof } = claimPremiumSchema.parse(req.body);
+      const { alias, email, code, paymentMethod, paymentNote, paymentProof } = claimPremiumSchema.parse(req.body);
       const valid = await storage.verifyCode(email, code);
       if (!valid) {
         return res.status(400).json({ ok: false, message: "Invalid or expired verification code." });
       }
-      const record = await storage.claimPremium(alias, email, paymentNote, paymentProof);
+      const record = await storage.claimPremium(alias, email, paymentMethod, paymentNote, paymentProof);
       return res.status(201).json({ ok: true, status: record.status, expiresAt: record.expiresAt });
     } catch (err) {
       if (err instanceof z.ZodError) {

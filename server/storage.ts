@@ -217,21 +217,21 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(bugReports).orderBy(asc(bugReports.createdAt));
   }
 
-  async claimPremium(alias: string, email: string, paymentNote?: string, paymentProof?: string): Promise<PremiumUser> {
+  async claimPremium(alias: string, email: string, paymentMethod?: string, paymentNote?: string, paymentProof?: string): Promise<PremiumUser> {
     const expiresAt = new Date();
     expiresAt.setFullYear(expiresAt.getFullYear() + 1);
     const [existing] = await db.select().from(premiumUsers).where(eq(premiumUsers.alias, alias)).limit(1);
     if (existing) {
       const [updated] = await db
         .update(premiumUsers)
-        .set({ email, paymentNote: paymentNote ?? null, paymentProof: paymentProof ?? null, status: "pending", expiresAt })
+        .set({ email, paymentMethod: paymentMethod ?? null, paymentNote: paymentNote ?? null, paymentProof: paymentProof ?? null, status: "pending", expiresAt })
         .where(eq(premiumUsers.alias, alias))
         .returning();
       return updated;
     }
     const [created] = await db
       .insert(premiumUsers)
-      .values({ alias, email, paymentNote: paymentNote ?? null, paymentProof: paymentProof ?? null, status: "pending", expiresAt })
+      .values({ alias, email, paymentMethod: paymentMethod ?? null, paymentNote: paymentNote ?? null, paymentProof: paymentProof ?? null, status: "pending", expiresAt })
       .returning();
     return created;
   }

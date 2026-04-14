@@ -69,6 +69,7 @@ export const premiumUsers = pgTable("premium_users", {
   id: serial("id").primaryKey(),
   alias: text("alias").notNull().unique(),
   email: text("email").notNull(),
+  paymentMethod: text("payment_method"),
   paymentNote: text("payment_note"),
   paymentProof: text("payment_proof"),
   status: text("status").notNull().default("pending"),
@@ -81,6 +82,7 @@ export const insertPremiumUserSchema = createInsertSchema(premiumUsers)
   .extend({
     alias: z.string().min(1),
     email: z.string().email("Please enter a valid email address"),
+    paymentMethod: z.string().optional(),
     paymentNote: z.string().optional(),
     paymentProof: z.string().optional(),
   });
