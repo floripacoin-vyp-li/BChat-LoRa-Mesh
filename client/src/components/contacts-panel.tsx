@@ -818,13 +818,27 @@ export function ContactsPanel({
                                 )}
                               </div>
 
-                              {/* On Liquid tab: stablecoin selector buttons */}
+                              {/* On Liquid tab: full token selector (L-BTC default + stablecoins) */}
                               {active.key === "liquid" && stablecoinOptions.length > 0 && (
                                 <div className="space-y-1.5" data-testid="liquid-stables-row">
                                   <p className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-wide">
-                                    Or pay in stablecoins — choose one:
+                                    Choose payment token:
                                   </p>
                                   <div className="flex flex-wrap gap-2">
+                                    {/* L-BTC — default, selected when no stablecoin chosen */}
+                                    <button
+                                      onClick={() => setSelectedStablecoin(null)}
+                                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-mono font-semibold transition-colors ${
+                                        selectedStablecoin === null
+                                          ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
+                                          : "bg-white/5 border-white/10 text-muted-foreground/50 hover:border-amber-500/25 hover:text-amber-300/70"
+                                      }`}
+                                      data-testid="button-stable-lbtc"
+                                    >
+                                      {selectedStablecoin === null && <Check size={10} className="flex-shrink-0" />}
+                                      {quote ?? "L-BTC"}
+                                    </button>
+
                                     {stablecoinOptions.map((opt) => {
                                       const isSelected = selectedStablecoin === opt.id;
                                       return (
@@ -840,11 +854,13 @@ export function ContactsPanel({
                                       );
                                     })}
                                   </div>
-                                  {selectedStablecoin && (
-                                    <p className="text-[10px] font-mono text-muted-foreground/40">
-                                      Selected: <span className="text-foreground/70">{stablecoinOptions.find(s => s.id === selectedStablecoin)?.amount}</span> — this will be recorded with your request
-                                    </p>
-                                  )}
+                                  <p className="text-[10px] font-mono text-muted-foreground/40">
+                                    Selected: <span className="text-foreground/70">
+                                      {selectedStablecoin
+                                        ? stablecoinOptions.find(s => s.id === selectedStablecoin)?.amount
+                                        : (quote ?? "L-BTC")}
+                                    </span> — this will be recorded with your request
+                                  </p>
                                 </div>
                               )}
 
