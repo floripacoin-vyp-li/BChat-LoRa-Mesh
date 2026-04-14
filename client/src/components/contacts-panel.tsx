@@ -794,6 +794,8 @@ export function ContactsPanel({
                         {(() => {
                           const active = paymentMethods.find((m) => m.key === paymentTab) ?? paymentMethods[0];
                           const quote = quotations[active.key];
+                          const liquidMethod = paymentMethods.find((m) => m.key === "liquid");
+                          const hasStablecoins = !!(liquidMethod && (liquidEurx || liquidDepix));
                           return (
                             <div className="space-y-1.5">
                               <div className="flex items-center justify-between">
@@ -804,6 +806,8 @@ export function ContactsPanel({
                                   </span>
                                 )}
                               </div>
+
+                              {/* On Liquid tab: stablecoins info row */}
                               {active.key === "liquid" && (
                                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 bg-blue-500/5 border border-blue-500/15 rounded-lg px-3 py-2" data-testid="liquid-stables-row">
                                   <span className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-wide w-full">Or pay in stablecoins:</span>
@@ -816,6 +820,7 @@ export function ContactsPanel({
                                   )}
                                 </div>
                               )}
+
                               <div className="flex items-center gap-2 bg-black/20 border border-white/10 rounded-lg px-2.5 py-2">
                                 <Zap size={11} className="text-amber-400 flex-shrink-0" />
                                 <span className="flex-1 text-[11px] font-mono text-amber-300 break-all">{active.address}</span>
@@ -831,6 +836,29 @@ export function ContactsPanel({
                               <div className="flex justify-center py-1">
                                 <QRCodeDisplay value={active.qrValue} size={140} />
                               </div>
+
+                              {/* On Lightning tab: "Or pay in stablecoins" switchover button */}
+                              {active.key === "lightning" && hasStablecoins && (
+                                <button
+                                  onClick={() => setPaymentTab("liquid")}
+                                  className="w-full flex items-center justify-between gap-2 bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/20 hover:border-emerald-500/35 rounded-lg px-3 py-2.5 transition-colors group"
+                                  data-testid="button-pay-stablecoins"
+                                >
+                                  <div className="flex flex-col items-start gap-0.5">
+                                    <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wide group-hover:text-muted-foreground/70 transition-colors">Or pay in stablecoins</span>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-[11px] font-mono font-semibold text-emerald-400">10.00 USDt</span>
+                                      {liquidEurx && (
+                                        <><span className="text-muted-foreground/30 text-[10px]">·</span><span className="text-[11px] font-mono font-semibold text-blue-300">{liquidEurx}</span></>
+                                      )}
+                                      {liquidDepix && (
+                                        <><span className="text-muted-foreground/30 text-[10px]">·</span><span className="text-[11px] font-mono font-semibold text-green-300">{liquidDepix}</span></>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <ChevronRight size={13} className="text-emerald-500/40 group-hover:text-emerald-400 transition-colors flex-shrink-0" />
+                                </button>
+                              )}
                             </div>
                           );
                         })()}
