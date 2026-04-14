@@ -654,6 +654,15 @@ export default function AdminPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/admin/premium", adminKey] }),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/admin/premium/${id}`, { method: "DELETE", headers });
+      if (!res.ok) throw new Error("Failed to delete");
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/admin/premium", adminKey] }),
+  });
+
   const { data: paymentConfig } = useQuery<PaymentConfig>({
     queryKey: ["/api/config/payment"],
     queryFn: async () => {
@@ -810,7 +819,7 @@ export default function AdminPage() {
         <div className="space-y-2">
           {filtered.map((u) => {
             const expanded = expandedId === u.id;
-            const acting = approveMutation.isPending || revokeMutation.isPending;
+            const acting = approveMutation.isPending || revokeMutation.isPending || deleteMutation.isPending;
             return (
               <div
                 key={u.id}
@@ -857,14 +866,24 @@ export default function AdminPage() {
                       </button>
                     )}
                     {u.status === "revoked" && (
-                      <button
-                        onClick={() => approveMutation.mutate(u.id)}
-                        disabled={acting}
-                        className="px-3 py-1.5 rounded-lg bg-green-500/10 text-green-400/70 text-[11px] font-semibold hover:bg-green-500/20 disabled:opacity-40 transition-colors border border-green-500/15"
-                        data-testid={`button-reapprove-${u.id}`}
-                      >
-                        Re-approve
-                      </button>
+                      <>
+                        <button
+                          onClick={() => approveMutation.mutate(u.id)}
+                          disabled={acting}
+                          className="px-3 py-1.5 rounded-lg bg-green-500/10 text-green-400/70 text-[11px] font-semibold hover:bg-green-500/20 disabled:opacity-40 transition-colors border border-green-500/15"
+                          data-testid={`button-reapprove-${u.id}`}
+                        >
+                          Re-approve
+                        </button>
+                        <button
+                          onClick={() => deleteMutation.mutate(u.id)}
+                          disabled={acting}
+                          className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400/80 text-[11px] font-semibold hover:bg-red-500/20 disabled:opacity-40 transition-colors border border-red-500/20"
+                          data-testid={`button-delete-${u.id}`}
+                        >
+                          Delete
+                        </button>
+                      </>
                     )}
                     <button
                       onClick={() => setExpandedId(expanded ? null : u.id)}

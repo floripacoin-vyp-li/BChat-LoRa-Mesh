@@ -271,6 +271,11 @@ export class DatabaseStorage implements IStorage {
     return updated ?? null;
   }
 
+  async deletePremiumUser(id: number): Promise<boolean> {
+    const result = await db.delete(premiumUsers).where(eq(premiumUsers.id, id)).returning();
+    return result.length > 0;
+  }
+
   async getPremiumByAlias(alias: string): Promise<PremiumUser | null> {
     const [row] = await db.select().from(premiumUsers).where(eq(premiumUsers.alias, alias)).limit(1);
     return row ?? null;

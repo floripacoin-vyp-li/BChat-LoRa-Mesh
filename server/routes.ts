@@ -586,6 +586,18 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/admin/premium/:id", adminAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+      const deleted = await storage.deletePremiumUser(id);
+      if (!deleted) return res.status(404).json({ message: "Not found" });
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ message: "Failed to delete" });
+    }
+  });
+
   // ── Payment config ─────────────────────────────────────────────────────────
 
   app.get("/api/config/payment", async (_req, res) => {
