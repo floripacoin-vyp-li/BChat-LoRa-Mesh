@@ -73,7 +73,7 @@ export function ContactsPanel({
     staleTime: 60_000,
   });
 
-  const { data: prices } = useQuery<{ bch: number; btc: number }>({
+  const { data: prices } = useQuery<{ bch: number; btc: number; eurPerUsd: number; brlPerUsd: number }>({
     queryKey: ["/api/prices"],
     staleTime: 60_000,
   });
@@ -90,6 +90,19 @@ export function ContactsPanel({
     ? Math.round((10 / prices.btc) * 100_000_000 / 100) * 100
     : null;
   const requiredMsats = requiredSats ? requiredSats * 1000 : null;
+
+  // Liquid stablecoin equivalents for $10 (USDt fixed, EURx/DePix from forex)
+  const liquidEurx  = prices?.eurPerUsd ? `${(10 * prices.eurPerUsd).toFixed(2)} EURx`  : null;
+  const liquidDepix = prices?.brlPerUsd ? `${(10 * prices.brlPerUsd).toFixed(2)} DePix` : null;
+
+  const liquidAmountStr = prices?.btc
+    ? [
+        `${(10 / prices.btc).toFixed(6)} L-BTC`,
+        "10.00 USDt",
+        prices.eurPerUsd  ? `${(10 * prices.eurPerUsd).toFixed(2)} EURx`  : null,
+        prices.brlPerUsd  ? `${(10 * prices.brlPerUsd).toFixed(2)} DePix` : null,
+      ].filter(Boolean).join(" | ")
+    : null;
 
   const quotations: Record<string, string | null> = {
     lightning: requiredSats ? `${requiredSats.toLocaleString()} sats` : null,
@@ -162,7 +175,9 @@ export function ContactsPanel({
     }
     setPremiumFormError(null);
     const activeMethod = (paymentMethods.find((m) => m.key === paymentTab) ?? paymentMethods[0])?.key;
-    const activeQuote = activeMethod ? (quotations[activeMethod] ?? undefined) : undefined;
+    const activeQuote = activeMethod === "liquid"
+      ? (liquidAmountStr ?? quotations["liquid"] ?? undefined)
+      : (activeMethod ? (quotations[activeMethod] ?? undefined) : undefined);
     claimMutation.mutate({ alias: myAlias, email: premiumEmail, code: premiumCode, paymentMethod: activeMethod, paymentAmount: activeQuote, paymentNote: premiumNote || undefined, paymentProof: premiumProof || undefined });
   };
 
@@ -789,6 +804,18 @@ export function ContactsPanel({
                                   </span>
                                 )}
                               </div>
+                              {active.key === "liquid" && (
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 bg-blue-500/5 border border-blue-500/15 rounded-lg px-3 py-2" data-testid="liquid-stables-row">
+                                  <span className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-wide w-full">Or pay in stablecoins:</span>
+                                  <span className="text-[11px] font-mono font-semibold text-emerald-400" data-testid="quote-usdt">10.00 USDt</span>
+                                  {liquidEurx && (
+                                    <><span className="text-muted-foreground/30">·</span><span className="text-[11px] font-mono font-semibold text-blue-300" data-testid="quote-eurx">{liquidEurx}</span></>
+                                  )}
+                                  {liquidDepix && (
+                                    <><span className="text-muted-foreground/30">·</span><span className="text-[11px] font-mono font-semibold text-green-300" data-testid="quote-depix">{liquidDepix}</span></>
+                                  )}
+                                </div>
+                              )}
                               <div className="flex items-center gap-2 bg-black/20 border border-white/10 rounded-lg px-2.5 py-2">
                                 <Zap size={11} className="text-amber-400 flex-shrink-0" />
                                 <span className="flex-1 text-[11px] font-mono text-amber-300 break-all">{active.address}</span>

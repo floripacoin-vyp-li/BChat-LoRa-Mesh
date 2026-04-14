@@ -392,20 +392,26 @@ export async function registerRoutes(
         return res.json(priceCache.data);
       }
       const upstream = await fetch(
-        "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin-cash,bitcoin&vs_currencies=usd",
+        "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin-cash,bitcoin&vs_currencies=usd,eur,brl",
         { signal: AbortSignal.timeout(6000) }
       );
       if (!upstream.ok) throw new Error(`CoinGecko ${upstream.status}`);
-      const json = await upstream.json() as Record<string, { usd: number }>;
+      const json = await upstream.json() as Record<string, { usd: number; eur?: number; brl?: number }>;
+      const btcUsd = json["bitcoin"]?.usd ?? 0;
+      const btcEur = json["bitcoin"]?.eur ?? 0;
+      const btcBrl = json["bitcoin"]?.brl ?? 0;
       const data = {
-        bch: json["bitcoin-cash"]?.usd ?? 0,
-        btc: json["bitcoin"]?.usd ?? 0,
+        bch:    json["bitcoin-cash"]?.usd ?? 0,
+        btc:    btcUsd,
+        // Derived forex rates: how many EUR / BRL equal 1 USD
+        eurPerUsd: btcUsd > 0 && btcEur > 0 ? btcEur / btcUsd : 0,
+        brlPerUsd: btcUsd > 0 && btcBrl > 0 ? btcBrl / btcUsd : 0,
       };
       priceCache = { data, at: now };
       res.json(data);
     } catch {
       if (priceCache) return res.json(priceCache.data);
-      res.status(503).json({ bch: 0, btc: 0 });
+      res.status(503).json({ bch: 0, btc: 0, eurPerUsd: 0, brlPerUsd: 0 });
     }
   });
 
