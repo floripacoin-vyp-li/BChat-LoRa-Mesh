@@ -282,12 +282,13 @@ export function PrivateChat({
                   <div className="px-3 py-2 border-t border-white/5 flex items-center justify-between gap-2">
                     <span className="text-[10px] text-muted-foreground/40">{formatTime(msg.timestamp)}</span>
                     {isIncoming ? (
-                      isPaid ? (
-                        <div className="flex items-center gap-1.5 text-green-400/80">
-                          <CheckCircle size={12} />
-                          <span className="text-[11px] font-mono">Paid</span>
-                        </div>
-                      ) : (
+                      <div className="flex items-center gap-2">
+                        {isPaid && (
+                          <div className="flex items-center gap-1 text-green-400/80">
+                            <CheckCircle size={11} />
+                            <span className="text-[10px] font-mono">Paid</span>
+                          </div>
+                        )}
                         <button
                           onClick={() => handlePayNow(payReq)}
                           className="flex items-center gap-1.5 px-3 py-1 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg text-xs font-mono transition-colors"
@@ -296,7 +297,7 @@ export function PrivateChat({
                           <ExternalLink size={11} />
                           Pay Now
                         </button>
-                      )
+                      </div>
                     ) : (
                       isPaid ? (
                         <div className="flex items-center gap-1.5 text-green-400/80">
