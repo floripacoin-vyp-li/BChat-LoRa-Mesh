@@ -286,7 +286,7 @@ export function PrivateChat({
                         {isPaid && (
                           <div className="flex items-center gap-1 text-green-400/80">
                             <CheckCircle size={11} />
-                            <span className="text-[10px] font-mono">Paid</span>
+                            <span className="text-[10px] font-mono">Open</span>
                           </div>
                         )}
                         <button
